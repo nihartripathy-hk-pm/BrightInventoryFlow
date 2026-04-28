@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens ─────────────────────────────────────────── */
+
+:root {
+  /* Dark theme (default — no class needed) */
+  --color-app:          10 14 23;
+  --color-card:         20 25 34;
+  --color-row:          26 31 46;
+  --color-border:       30 35 51;
+  --color-primary:      226 232 240;
+  --color-muted:        148 163 184;
+  --color-muted-dark:   100 116 139;
+  --color-accent:       13 148 136;
+  --color-accent-hover: 15 118 110;
+
+  --scrollbar-track:       #0a0e17;
+  --scrollbar-thumb:       #1e2333;
+  --scrollbar-thumb-hover: #2d3748;
+  --range-track:           #1e2333;
+  --range-thumb-border:    #141922;
+}
+
+.light {
+  /* Light theme */
+  --color-app:          248 250 252;
+  --color-card:         255 255 255;
+  --color-row:          241 245 249;
+  --color-border:       226 232 240;
+  --color-primary:      15 23 42;
+  --color-muted:        100 116 139;
+  --color-muted-dark:   148 163 184;
+  --color-accent:       13 148 136;
+  --color-accent-hover: 15 118 110;
+
+  --scrollbar-track:       #f8fafc;
+  --scrollbar-thumb:       #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
+  --range-track:           #e2e8f0;
+  --range-thumb-border:    #ffffff;
+}
+
+html, body {
+  background: rgb(var(--color-app));
+  color: rgb(var(--color-primary));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* Remove default number input arrows */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--range-track);
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0d9488;
+  cursor: pointer;
+  border: 2px solid var(--range-thumb-border);
+}
+
+/* Pulse animation for test mode banner */
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+  70%  { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+}
+.pulse-warning { animation: pulse-ring 1.8s ease-out infinite; }
+
+/*
+ * ── Theme-aware utility overrides ────────────────────────────
+ *
+ * Next.js's CSS optimizer inlines CSS variable values inside
+ * Tailwind-generated utility classes (baking in the :root values).
+ * These hand-written rules come AFTER @tailwind utilities in the
+ * stylesheet, so they win the cascade, and Next.js preserves the
+ * var() references since they are not inside Tailwind's config output.
+ */
+
+/* Backgrounds */
+.bg-app  { background-color: rgb(var(--color-app)); }
+.bg-card { background-color: rgb(var(--color-card)); }
+.bg-row  { background-color: rgb(var(--color-row)); }
+.hover\:bg-row:hover { background-color: rgb(var(--color-row)); }
+.hover\:bg-row\/50:hover { background-color: rgb(var(--color-row) / 0.5); }
+
+/* Borders */
+.border-border      { border-color: rgb(var(--color-border)); }
+.border-border\/50  { border-color: rgb(var(--color-border) / 0.5); }
+.border-border\/80  { border-color: rgb(var(--color-border) / 0.8); }
+
+/* Text */
+.text-primary         { color: rgb(var(--color-primary)); }
+.text-primary\/80     { color: rgb(var(--color-primary) / 0.8); }
+.text-muted           { color: rgb(var(--color-muted)); }
+.text-muted-dark      { color: rgb(var(--color-muted-dark)); }
+.hover\:text-primary:hover { color: rgb(var(--color-primary)); }
+/* Use html prefix for higher specificity to beat Autoprefixer rule merging */
+html .placeholder\:text-muted-dark::placeholder { color: rgb(var(--color-muted-dark)); }
