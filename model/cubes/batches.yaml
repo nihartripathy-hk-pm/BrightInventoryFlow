@@ -1,0 +1,165 @@
+cubes:
+  - name: batch_runs
+    sql_table: inventory.batch_runs
+    data_source: redshift_source
+
+    joins:
+      - name: batches
+        sql: "{batch_runs}.id = {batches}.master_id"
+        relationship: one_to_many
+
+    dimensions:
+
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: Batch run ID — used as master_id in the batches child table.
+
+      - name: master_sink_name
+        sql: "{CUBE}.master_sink_name"
+        type: string
+        description: Name of the master sink warehouse for this run.
+
+      - name: status
+        sql: "{CUBE}.status"
+        type: string
+        description: Run status — 'pending_approval', 'committed', or 'rejected'.
+
+      - name: generated_at
+        sql: "{CUBE}.generated_at"
+        type: time
+        description: When the batch run was generated.
+
+      - name: generated_at_weekly
+        sql: "DATE_TRUNC('week', {CUBE}.generated_at)"
+        type: time
+        description: Week of batch run generation.
+
+      - name: generated_at_monthly
+        sql: "DATE_TRUNC('month', {CUBE}.generated_at)"
+        type: time
+        description: Month of batch run generation.
+
+      - name: committed_by
+        sql: "{CUBE}.committed_by"
+        type: string
+        description: User who committed or rejected this run.
+
+      - name: committed_at
+        sql: "{CUBE}.committed_at"
+        type: time
+        description: When the run was committed (null if not yet approved).
+
+      - name: approval_lag_days
+        sql: "DATEDIFF('day', {CUBE}.generated_at, {CUBE}.committed_at)"
+        type: number
+        description: Days between batch generation and approval/rejection.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+
+    measures:
+
+      - name: total_runs
+        type: count
+        description: Total batch runs.
+
+      - name: committed_runs
+        sql: "CASE WHEN {CUBE}.status = 'committed' THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of approved (committed) batch runs.
+
+      - name: rejected_runs
+        sql: "CASE WHEN {CUBE}.status = 'rejected' THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of rejected batch runs.
+
+      - name: pending_runs
+        sql: "CASE WHEN {CUBE}.status = 'pending_approval' THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of runs awaiting approval.
+
+      - name: avg_approval_lag_days
+        sql: "DATEDIFF('day', {CUBE}.generated_at, {CUBE}.committed_at)"
+        type: avg
+        description: Average days from run generation to approval.
+
+    segments:
+      - name: committed_only
+        sql: "{CUBE}.status = 'committed'"
+
+      - name: rejected_only
+        sql: "{CUBE}.status = 'rejected'"
+
+      - name: last_30_days
+        sql: "{CUBE}.generated_at >= CURRENT_DATE - INTERVAL '30 days'"
+
+  - name: batches
+    sql_table: inventory.batches
+    data_source: redshift_source
+
+    dimensions:
+
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: Batch entry ID.
+
+      - name: master_id
+        sql: "{CUBE}.master_id"
+        type: string
+        description: Parent batch run ID (FK to batch_runs.id).
+
+      - name: wh_id
+        sql: "{CUBE}.wh_id"
+        type: string
+        description: Donor warehouse ID.
+
+      - name: wh_name
+        sql: "{CUBE}.wh_name"
+        type: string
+        description: Donor warehouse name.
+
+      - name: status
+        sql: "{CUBE}.status"
+        type: string
+        description: Per-warehouse batch status — 'pending', 'committed', or 'rejected'.
+
+      - name: generated_at
+        sql: "{CUBE}.generated_at"
+        type: time
+
+      - name: committed_by
+        sql: "{CUBE}.committed_by"
+        type: string
+
+      - name: committed_at
+        sql: "{CUBE}.committed_at"
+        type: time
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+
+    measures:
+
+      - name: total_batch_entries
+        type: count
+        description: Total batch entries (one per donor warehouse per run).
+
+      - name: committed_entries
+        sql: "CASE WHEN {CUBE}.status = 'committed' THEN 1 ELSE 0 END"
+        type: sum
+        description: Committed batch entries.
+
+      - name: unique_warehouses_in_batches
+        sql: "{CUBE}.wh_id"
+        type: countDistinct
+        description: Distinct donor warehouses that have participated in any batch.
+
+    segments:
+      - name: committed_only
+        sql: "{CUBE}.status = 'committed'"

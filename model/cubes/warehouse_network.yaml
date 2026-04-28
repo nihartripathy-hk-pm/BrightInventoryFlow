@@ -1,0 +1,155 @@
+cubes:
+  - name: warehouse_network
+    sql_table: inventory.warehouses
+    data_source: redshift_source
+
+    joins:
+      - name: donor_settings
+        sql: "{warehouse_network}.id = {donor_settings}.warehouse_id"
+        relationship: one_to_one
+
+      - name: master_sink_config
+        sql: >
+          {warehouse_network}.id = {master_sink_config}.warehouse_id
+          AND {master_sink_config}.is_active = TRUE
+        relationship: one_to_one
+
+    dimensions:
+
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: Warehouse unique ID.
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+        description: Warehouse display name.
+
+      - name: location_code
+        sql: "{CUBE}.location_code"
+        type: string
+        description: Short location code.
+
+      - name: city
+        sql: "{CUBE}.city"
+        type: string
+        description: City where the warehouse is located.
+
+      - name: region
+        sql: "{CUBE}.region"
+        type: string
+        description: Geographic region.
+
+      - name: pincode
+        sql: "{CUBE}.pincode"
+        type: string
+        description: Warehouse pincode.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: Whether the warehouse is currently active.
+
+      - name: is_donor
+        sql: "COALESCE({donor_settings}.is_participating, FALSE)"
+        type: boolean
+        description: Whether the warehouse participates as a donor.
+
+      - name: is_master_sink
+        sql: "CASE WHEN {master_sink_config}.warehouse_id IS NOT NULL THEN TRUE ELSE FALSE END"
+        type: boolean
+        description: Whether this warehouse is the current active master sink.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+        description: Last updated timestamp.
+
+    measures:
+
+      - name: total_warehouses
+        type: count
+        description: Total number of warehouses.
+
+      - name: active_warehouses
+        sql: "CASE WHEN {CUBE}.is_active THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of active warehouses.
+
+      - name: donor_warehouses
+        sql: "CASE WHEN COALESCE({donor_settings}.is_participating, FALSE) THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of warehouses participating as donors.
+
+      - name: total_stock_units
+        sql: "{CUBE}.stock_units"
+        type: sum
+        description: Total stock units across all warehouses.
+
+      - name: avg_capacity_pct
+        sql: "{CUBE}.capacity_pct"
+        type: avg
+        description: Average capacity utilisation percentage.
+
+    segments:
+      - name: active_only
+        sql: "{CUBE}.is_active = TRUE"
+
+      - name: donors_only
+        sql: "COALESCE({donor_settings}.is_participating, FALSE) = TRUE"
+
+---
+# Referenced via join from warehouse_network — no standalone cube needed for most queries.
+# Included here so Cube resolves the join target.
+cubes:
+  - name: donor_settings
+    sql_table: inventory.donor_settings
+    data_source: redshift_source
+
+    dimensions:
+      - name: warehouse_id
+        sql: "{CUBE}.warehouse_id"
+        type: string
+        primary_key: true
+
+      - name: is_participating
+        sql: "{CUBE}.is_participating"
+        type: boolean
+        description: Whether this warehouse participates in donor transfers.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+  - name: master_sink_config
+    sql_table: inventory.master_sink_config
+    data_source: redshift_source
+
+    dimensions:
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+
+      - name: warehouse_id
+        sql: "{CUBE}.warehouse_id"
+        type: string
+
+      - name: warehouse_name
+        sql: "{CUBE}.warehouse_name"
+        type: string
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: TRUE for the current active master sink; FALSE for history rows.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time

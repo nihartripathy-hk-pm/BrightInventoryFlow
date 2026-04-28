@@ -1,0 +1,56 @@
+cubes:
+  - name: inventory_conditions
+    sql_table: inventory.inventory_conditions
+    data_source: redshift_source
+
+    dimensions:
+
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: Condition unique ID.
+
+      - name: condition_type
+        sql: "{CUBE}.condition_type"
+        type: string
+        description: Physical state of inventory — 'good', 'damaged', or 'expired'.
+
+      - name: description
+        sql: "{CUBE}.description"
+        type: string
+        description: Human-readable description of the condition.
+
+      - name: is_enabled
+        sql: "{CUBE}.is_enabled"
+        type: boolean
+        description: Whether this condition is in scope for the current liquidation run.
+
+      - name: in_scope_label
+        sql: "CASE WHEN {CUBE}.is_enabled THEN 'In Scope' ELSE 'Out of Scope' END"
+        type: string
+        description: Display label for scope status.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: FALSE when soft-deleted.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+
+      - name: total_conditions
+        type: count
+        description: Total inventory condition types defined.
+
+      - name: enabled_conditions
+        sql: "CASE WHEN {CUBE}.is_enabled THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of inventory conditions currently in scope for this run.
+
+    segments:
+      - name: in_scope
+        sql: "{CUBE}.is_enabled = TRUE AND {CUBE}.is_active = TRUE"

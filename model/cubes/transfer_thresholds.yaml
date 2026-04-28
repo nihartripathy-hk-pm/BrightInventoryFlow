@@ -1,0 +1,136 @@
+cubes:
+  - name: thresholds_category
+    sql_table: inventory.thresholds_category
+    data_source: redshift_source
+
+    dimensions:
+
+      - name: category_id
+        sql: "{CUBE}.category_id"
+        type: string
+        primary_key: true
+        description: Category ID this threshold applies to.
+
+      - name: category_name
+        sql: "{CUBE}.category_name"
+        type: string
+        description: Category name.
+
+      - name: cogs_min
+        sql: "{CUBE}.cogs_min"
+        type: number
+        description: Minimum COGS for a transfer to be eligible.
+
+      - name: cogs_max
+        sql: "{CUBE}.cogs_max"
+        type: number
+        description: Maximum COGS for a transfer to be eligible.
+
+      - name: units_min
+        sql: "{CUBE}.units_min"
+        type: number
+        description: Minimum unit count for a transfer to be eligible.
+
+      - name: units_max
+        sql: "{CUBE}.units_max"
+        type: number
+        description: Maximum unit count for a transfer to be eligible.
+
+      - name: weight_min
+        sql: "{CUBE}.weight_min"
+        type: number
+        description: Minimum weight for a transfer to be eligible.
+
+      - name: weight_max
+        sql: "{CUBE}.weight_max"
+        type: number
+        description: Maximum weight for a transfer to be eligible.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: FALSE when this override has been soft-deleted.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+
+      - name: categories_with_thresholds
+        type: count
+        description: Number of categories that have threshold overrides configured.
+
+    segments:
+      - name: active_only
+        sql: "{CUBE}.is_active = TRUE"
+
+  - name: thresholds_brand
+    sql_table: inventory.thresholds_brand
+    data_source: redshift_source
+
+    dimensions:
+
+      - name: brand_id
+        sql: "{CUBE}.brand_id"
+        type: string
+        primary_key: true
+        description: Brand ID this threshold applies to.
+
+      - name: brand_name
+        sql: "{CUBE}.brand_name"
+        type: string
+        description: Brand name.
+
+      - name: category_id
+        sql: "{CUBE}.category_id"
+        type: string
+        description: Parent category ID.
+
+      - name: category_name
+        sql: "{CUBE}.category_name"
+        type: string
+        description: Parent category name.
+
+      - name: cogs_min
+        sql: "{CUBE}.cogs_min"
+        type: number
+
+      - name: cogs_max
+        sql: "{CUBE}.cogs_max"
+        type: number
+
+      - name: units_min
+        sql: "{CUBE}.units_min"
+        type: number
+
+      - name: units_max
+        sql: "{CUBE}.units_max"
+        type: number
+
+      - name: weight_min
+        sql: "{CUBE}.weight_min"
+        type: number
+
+      - name: weight_max
+        sql: "{CUBE}.weight_max"
+        type: number
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: FALSE when this override has been soft-deleted.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+
+      - name: brands_with_thresholds
+        type: count
+        description: Number of brands that have threshold overrides configured.
+
+    segments:
+      - name: active_only
+        sql: "{CUBE}.is_active = TRUE"
