@@ -17,27 +17,56 @@ export type Warehouse = {
   stockUnits: number;
   capacityPct: number;
   isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
+};
+
+export type MasterSinkConfig = {
+  id: string;
+  warehouseId: string;
+  warehouseName: string;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type DonorSetting = {
   warehouseId: string;
   isParticipating: boolean;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type RoutePairOverride = {
   donorWarehouseId: string;
   sinkWarehouseId: string;
   isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type ThresholdsGlobal = {
+  id: string;
   cogsMin: number | null;
   cogsMax: number | null;
   unitsMin: number | null;
   unitsMax: number | null;
   weightMin: number | null;
   weightMax: number | null;
-  updatedAt: string;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string;
 };
 
 export type ThresholdsCategory = {
@@ -49,11 +78,17 @@ export type ThresholdsCategory = {
   unitsMax: number | null;
   weightMin: number | null;
   weightMax: number | null;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type ThresholdsBrand = {
   brandId: string;
   brandName: string;
+  categoryId: string;
   categoryName: string;
   cogsMin: number | null;
   cogsMax: number | null;
@@ -61,23 +96,36 @@ export type ThresholdsBrand = {
   unitsMax: number | null;
   weightMin: number | null;
   weightMax: number | null;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type ProductConfigGlobal = {
+  id: string;
   standardShelfLifePct: number;
   opShelfLifePct: number;
   standardEnabled: boolean;
   opEnabled: boolean;
-  updatedAt: string;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string;
 };
 
-export type BrandShelfLife = {
-  brandId: string;
-  brandName: string;
+export type Brand = {
+  id: string;
+  name: string;
   categoryId: string;
-  categoryName: string;
   shelfLifeOverridePct: number | null;
   isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type SKU = {
@@ -90,35 +138,51 @@ export type SKU = {
   type: "standard" | "op";
   shelfLifeOverridePct: number | null;
   isIgnored: boolean;
+  isActive: boolean;
   stockUnits: number;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type Category = {
   id: string;
   name: string;
-  skuCount: number;
+  shelfLifeOverridePct: number | null;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
-export type Brand = {
+export type InventoryCondition = {
   id: string;
-  name: string;
-  categoryId: string;
-  categoryName: string;
-  skuCount: number;
+  conditionType: "good" | "damaged" | "expired";
+  description: string;
+  isEnabled: boolean;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
+// Aligns with batch_runs DB table
 export type Batch = {
   id: string;
-  engineVersion: string;
+  masterSinkId: string;
   masterSinkName: string;
   status: "pending_approval" | "committed" | "rejected";
   generatedAt: string;
+  committedBy: string | null;
   committedAt: string | null;
-  totalOrders: number;
-  totalSkus: number;
-  totalUnits: number;
-  totalCogs: number;
-  totalWeight: number;
+  isActive: boolean;
+  createdBy: string;
+  createDt: string;
+  updatedBy: string | null;
+  updateDt: string | null;
 };
 
 export type TransferOrder = {
@@ -157,15 +221,18 @@ export type PendingChange = {
 
 export type AuditEntry = {
   id: string;
-  timestamp: string;
+  eventDt: string;
   module: string;
   action: string;
   entity: string;
+  entityId: string | null;
   summary: string;
   userId: string;
+  sessionId: string;
   beforeJson: string;
   afterJson: string;
-  sessionId: string;
+  createdBy: string;
+  createDt: string;
 };
 
 // ─── Sheet tab names ──────────────────────────────────────────────────────────
@@ -178,7 +245,6 @@ const SHEET_NAMES = {
   ThresholdsCategory: "ThresholdsCategory",
   ThresholdsBrand: "ThresholdsBrand",
   ProductConfigGlobal: "ProductConfigGlobal",
-  BrandShelfLife: "BrandShelfLife",
   SKUs: "SKUs",
   Categories: "Categories",
   Brands: "Brands",
@@ -187,36 +253,42 @@ const SHEET_NAMES = {
   OrderLineItems: "OrderLineItems",
   PendingChanges: "PendingChanges",
   AuditLog: "AuditLog",
+  InventoryConditions: "InventoryConditions",
 } as const;
 
 const SHEET_HEADERS: Record<string, string[]> = {
-  Warehouses: ["id", "name", "location_code", "city", "region", "pincode", "stock_units", "capacity_pct", "is_active"],
-  MasterSinkConfig: ["key", "value"],
-  DonorSettings: ["warehouse_id", "is_participating"],
-  RoutePairOverrides: ["donor_warehouse_id", "sink_warehouse_id", "is_active"],
-  ThresholdsGlobal: ["cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "updated_at"],
-  ThresholdsCategory: ["category_id", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max"],
-  ThresholdsBrand: ["brand_id", "brand_name", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max"],
-  ProductConfigGlobal: ["standard_shelf_life_pct", "op_shelf_life_pct", "standard_enabled", "op_enabled", "updated_at"],
-  BrandShelfLife: ["brand_id", "brand_name", "category_id", "category_name", "shelf_life_override_pct", "is_active"],
-  SKUs: ["id", "name", "brand_id", "brand_name", "category_id", "category_name", "type", "shelf_life_override_pct", "is_ignored", "stock_units"],
-  Categories: ["id", "name", "sku_count"],
-  Brands: ["id", "name", "category_id", "category_name", "sku_count"],
-  Batches: ["id", "engine_version", "master_sink_name", "status", "generated_at", "committed_at", "total_orders", "total_skus", "total_units", "total_cogs", "total_weight"],
+  Warehouses: ["id", "name", "location_code", "city", "region", "pincode", "stock_units", "capacity_pct", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  MasterSinkConfig: ["id", "warehouse_id", "warehouse_name", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  DonorSettings: ["warehouse_id", "is_participating", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  RoutePairOverrides: ["donor_warehouse_id", "sink_warehouse_id", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  ThresholdsGlobal: ["id", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  ThresholdsCategory: ["category_id", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  ThresholdsBrand: ["brand_id", "brand_name", "category_id", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  ProductConfigGlobal: ["id", "standard_shelf_life_pct", "op_shelf_life_pct", "standard_enabled", "op_enabled", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  Brands: ["id", "name", "category_id", "shelf_life_override_pct", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  SKUs: ["id", "name", "brand_id", "brand_name", "category_id", "category_name", "type", "shelf_life_override_pct", "is_ignored", "is_active", "stock_units", "created_by", "create_dt", "updated_by", "update_dt"],
+  Categories: ["id", "name", "shelf_life_override_pct", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  Batches: ["id", "master_sink_id", "master_sink_name", "status", "generated_at", "committed_by", "committed_at", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
   TransferOrders: ["id", "batch_id", "type", "source_warehouse_id", "source_name", "destination_warehouse_id", "destination_name", "units", "cogs", "weight", "status"],
   OrderLineItems: ["id", "order_id", "sku_id", "sku_name", "units", "cogs", "expiry_date"],
   PendingChanges: ["id", "module", "entity", "op", "target_id", "payload", "created_at"],
-  AuditLog: ["id", "timestamp", "module", "action", "entity", "summary", "user_id", "before_json", "after_json", "session_id"],
+  AuditLog: ["id", "event_dt", "module", "action", "entity", "entity_id", "summary", "user_id", "session_id", "before_json", "after_json", "created_by", "create_dt"],
+  InventoryConditions: ["id", "condition_type", "description", "is_enabled", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
 };
 
 // ─── Parsing helpers ──────────────────────────────────────────────────────────
-const num = (v: string): number | null => (v && v !== "" ? parseFloat(v) : null);
+const num = (v: string): number | null => {
+  if (!v || v === "") return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+};
 const bool = (v: string): boolean => v === "true" || v === "TRUE";
 const str = (v: string | undefined): string => v ?? "";
+const nullStr = (v: string | undefined): string | null =>
+  v && v !== "" ? v : null;
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 async function getAuthClient() {
-  // Priority 1: GOOGLE_SERVICE_ACCOUNT_KEY env var
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
     const auth = new google.auth.GoogleAuth({
@@ -226,7 +298,6 @@ async function getAuthClient() {
     return auth.getClient();
   }
 
-  // Priority 2: .google-token.json + credentials.json files
   const tokenPath = path.resolve(process.cwd(), ".google-token.json");
   const credPath = path.resolve(process.cwd(), "credentials.json");
   if (fs.existsSync(tokenPath) && fs.existsSync(credPath)) {
@@ -238,7 +309,6 @@ async function getAuthClient() {
     return oAuth2Client;
   }
 
-  // Priority 3: Application Default Credentials
   const auth = new google.auth.GoogleAuth({
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
@@ -279,7 +349,6 @@ async function readSheet(sheetName: string): Promise<string[][]> {
     return (response.data.values as string[][]) ?? [];
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Sheet doesn't exist yet (pre-seed) or quota exceeded — return empty
     if (
       msg.includes("Unable to parse range") ||
       msg.includes("Quota exceeded") ||
@@ -301,16 +370,33 @@ async function writeSheet(sheetName: string, rows: (string | number | boolean | 
   });
 }
 
+async function createSheetTab(sheetName: string): Promise<void> {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { requests: [{ addSheet: { properties: { title: sheetName } } }] },
+  });
+}
+
 async function clearAndWriteSheet(
   sheetName: string,
   headers: string[],
   rows: (string | number | boolean | null)[][]
 ): Promise<void> {
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.clear({
-    spreadsheetId: SPREADSHEET_ID,
-    range: sheetName,
-  });
+  try {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SPREADSHEET_ID,
+      range: sheetName,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Unable to parse range")) {
+      await createSheetTab(sheetName);
+    } else {
+      throw err;
+    }
+  }
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A1`,
@@ -354,7 +440,6 @@ export async function ensureSheetsExist(): Promise<void> {
     });
   }
 
-  // Write headers for any sheet that is empty
   for (const sheetName of Object.keys(SHEET_NAMES)) {
     const data = await readSheet(sheetName);
     if (data.length === 0) {
@@ -377,20 +462,18 @@ export async function getWarehouses(): Promise<Warehouse[]> {
     stockUnits: num(r[6]) ?? 0,
     capacityPct: num(r[7]) ?? 0,
     isActive: bool(r[8]),
+    createdBy: str(r[9]),
+    createDt: str(r[10]),
+    updatedBy: nullStr(r[11]),
+    updateDt: nullStr(r[12]),
   }));
 }
 
 export async function upsertWarehouses(warehouses: Warehouse[]): Promise<void> {
   const rows = warehouses.map((w) => [
-    w.id,
-    w.name,
-    w.locationCode,
-    w.city,
-    w.region,
-    w.pincode,
-    w.stockUnits,
-    w.capacityPct,
-    String(w.isActive),
+    w.id, w.name, w.locationCode, w.city, w.region, w.pincode,
+    w.stockUnits, w.capacityPct, String(w.isActive),
+    w.createdBy, w.createDt, w.updatedBy ?? "", w.updateDt ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.Warehouses, SHEET_HEADERS.Warehouses, rows);
 }
@@ -399,20 +482,23 @@ export async function upsertWarehouses(warehouses: Warehouse[]): Promise<void> {
 export async function getMasterSinkId(): Promise<string | null> {
   const rows = await readSheet(SHEET_NAMES.MasterSinkConfig);
   if (rows.length <= 1) return null;
-  const row = rows.slice(1).find((r) => r[0] === "masterSinkWarehouseId");
+  const row = rows.slice(1).find((r) => bool(r[3])); // is_active at index 3
   return row ? str(row[1]) : null;
 }
 
-export async function setMasterSinkId(id: string): Promise<void> {
+export async function setMasterSinkId(warehouseId: string | null, warehouseName?: string): Promise<void> {
   const rows = await readSheet(SHEET_NAMES.MasterSinkConfig);
   const dataRows: string[][] = rows.length > 1 ? (rows.slice(1) as string[][]) : [];
-  const idx = dataRows.findIndex((r) => r[0] === "masterSinkWarehouseId");
-  if (idx >= 0) {
-    dataRows[idx] = ["masterSinkWarehouseId", id];
-  } else {
-    dataRows.push(["masterSinkWarehouseId", id]);
+  // Deactivate all existing rows, preserving their audit columns
+  const updated = dataRows.map((r) => [
+    str(r[0]), str(r[1]), str(r[2]), "false",
+    str(r[4] ?? ""), str(r[5] ?? ""), str(r[6] ?? ""), str(r[7] ?? ""),
+  ]);
+  if (warehouseId !== null) {
+    const now = new Date().toISOString();
+    updated.push([`msc_${Date.now()}`, warehouseId, warehouseName ?? "", "true", "prototype_user", now, "", ""]);
   }
-  await clearAndWriteSheet(SHEET_NAMES.MasterSinkConfig, SHEET_HEADERS.MasterSinkConfig, dataRows);
+  await clearAndWriteSheet(SHEET_NAMES.MasterSinkConfig, SHEET_HEADERS.MasterSinkConfig, updated);
 }
 
 // ─── DonorSettings ────────────────────────────────────────────────────────────
@@ -422,11 +508,19 @@ export async function getDonorSettings(): Promise<DonorSetting[]> {
   return rows.slice(1).map((r) => ({
     warehouseId: str(r[0]),
     isParticipating: bool(r[1]),
+    isActive: bool(r[2]),
+    createdBy: str(r[3]),
+    createDt: str(r[4]),
+    updatedBy: nullStr(r[5]),
+    updateDt: nullStr(r[6]),
   }));
 }
 
 export async function saveDonorSettings(settings: DonorSetting[]): Promise<void> {
-  const rows = settings.map((s) => [s.warehouseId, String(s.isParticipating)]);
+  const rows = settings.map((s) => [
+    s.warehouseId, String(s.isParticipating), String(s.isActive),
+    s.createdBy, s.createDt, s.updatedBy ?? "", s.updateDt ?? "",
+  ]);
   await clearAndWriteSheet(SHEET_NAMES.DonorSettings, SHEET_HEADERS.DonorSettings, rows);
 }
 
@@ -438,56 +532,69 @@ export async function getRoutePairOverrides(): Promise<RoutePairOverride[]> {
     donorWarehouseId: str(r[0]),
     sinkWarehouseId: str(r[1]),
     isActive: bool(r[2]),
+    createdBy: str(r[3]),
+    createDt: str(r[4]),
+    updatedBy: nullStr(r[5]),
+    updateDt: nullStr(r[6]),
   }));
 }
 
 export async function saveRoutePairOverrides(overrides: RoutePairOverride[]): Promise<void> {
-  const rows = overrides.map((o) => [o.donorWarehouseId, o.sinkWarehouseId, String(o.isActive)]);
+  const rows = overrides.map((o) => [
+    o.donorWarehouseId, o.sinkWarehouseId, String(o.isActive),
+    o.createdBy, o.createDt, o.updatedBy ?? "", o.updateDt ?? "",
+  ]);
   await clearAndWriteSheet(SHEET_NAMES.RoutePairOverrides, SHEET_HEADERS.RoutePairOverrides, rows);
 }
 
 // ─── ThresholdsGlobal ─────────────────────────────────────────────────────────
+// Columns: id(0) cogs_min(1) cogs_max(2) units_min(3) units_max(4) weight_min(5) weight_max(6)
+//          is_active(7) created_by(8) create_dt(9) updated_by(10) update_dt(11)
 export async function getThresholdsGlobal(): Promise<ThresholdsGlobal> {
   const rows = await readSheet(SHEET_NAMES.ThresholdsGlobal);
   if (rows.length <= 1) {
     return {
-      cogsMin: null,
-      cogsMax: null,
-      unitsMin: null,
-      unitsMax: null,
-      weightMin: null,
-      weightMax: null,
-      updatedAt: "",
+      id: "global",
+      cogsMin: null, cogsMax: null,
+      unitsMin: null, unitsMax: null,
+      weightMin: null, weightMax: null,
+      isActive: true,
+      createdBy: "", createDt: "", updatedBy: null, updateDt: "",
     };
   }
   const r = rows[1];
   return {
-    cogsMin: num(r[0]),
-    cogsMax: num(r[1]),
-    unitsMin: num(r[2]),
-    unitsMax: num(r[3]),
-    weightMin: num(r[4]),
-    weightMax: num(r[5]),
-    updatedAt: str(r[6]),
+    id: str(r[0]) || "global",
+    cogsMin: num(r[1]),
+    cogsMax: num(r[2]),
+    unitsMin: num(r[3]),
+    unitsMax: num(r[4]),
+    weightMin: num(r[5]),
+    weightMax: num(r[6]),
+    isActive: r[7] !== undefined ? bool(r[7]) : true,
+    createdBy: str(r[8]),
+    createDt: str(r[9]),
+    updatedBy: nullStr(r[10]),
+    updateDt: str(r[11]),
   };
 }
 
 export async function saveThresholdsGlobal(t: ThresholdsGlobal): Promise<void> {
-  const rows = [
-    [
-      t.cogsMin ?? "",
-      t.cogsMax ?? "",
-      t.unitsMin ?? "",
-      t.unitsMax ?? "",
-      t.weightMin ?? "",
-      t.weightMax ?? "",
-      t.updatedAt,
-    ],
-  ];
+  const rows = [[
+    t.id,
+    t.cogsMin ?? "", t.cogsMax ?? "",
+    t.unitsMin ?? "", t.unitsMax ?? "",
+    t.weightMin ?? "", t.weightMax ?? "",
+    String(t.isActive),
+    t.createdBy, t.createDt, t.updatedBy ?? "", t.updateDt,
+  ]];
   await clearAndWriteSheet(SHEET_NAMES.ThresholdsGlobal, SHEET_HEADERS.ThresholdsGlobal, rows);
 }
 
 // ─── ThresholdsCategory ───────────────────────────────────────────────────────
+// Columns: category_id(0) category_name(1) cogs_min(2) cogs_max(3) units_min(4)
+//          units_max(5) weight_min(6) weight_max(7) is_active(8)
+//          created_by(9) create_dt(10) updated_by(11) update_dt(12)
 export async function getThresholdsCategory(): Promise<ThresholdsCategory[]> {
   const rows = await readSheet(SHEET_NAMES.ThresholdsCategory);
   if (rows.length <= 1) return [];
@@ -500,117 +607,140 @@ export async function getThresholdsCategory(): Promise<ThresholdsCategory[]> {
     unitsMax: num(r[5]),
     weightMin: num(r[6]),
     weightMax: num(r[7]),
+    isActive: r[8] !== undefined ? bool(r[8]) : true,
+    createdBy: str(r[9]),
+    createDt: str(r[10]),
+    updatedBy: nullStr(r[11]),
+    updateDt: nullStr(r[12]),
   }));
 }
 
 export async function saveThresholdsCategory(rows: ThresholdsCategory[]): Promise<void> {
   const data = rows.map((r) => [
-    r.categoryId,
-    r.categoryName,
-    r.cogsMin ?? "",
-    r.cogsMax ?? "",
-    r.unitsMin ?? "",
-    r.unitsMax ?? "",
-    r.weightMin ?? "",
-    r.weightMax ?? "",
+    r.categoryId, r.categoryName,
+    r.cogsMin ?? "", r.cogsMax ?? "",
+    r.unitsMin ?? "", r.unitsMax ?? "",
+    r.weightMin ?? "", r.weightMax ?? "",
+    String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.ThresholdsCategory, SHEET_HEADERS.ThresholdsCategory, data);
 }
 
 // ─── ThresholdsBrand ──────────────────────────────────────────────────────────
+// Columns: brand_id(0) brand_name(1) category_id(2) category_name(3) cogs_min(4)
+//          cogs_max(5) units_min(6) units_max(7) weight_min(8) weight_max(9)
+//          is_active(10) created_by(11) create_dt(12) updated_by(13) update_dt(14)
 export async function getThresholdsBrand(): Promise<ThresholdsBrand[]> {
   const rows = await readSheet(SHEET_NAMES.ThresholdsBrand);
   if (rows.length <= 1) return [];
   return rows.slice(1).map((r) => ({
     brandId: str(r[0]),
     brandName: str(r[1]),
-    categoryName: str(r[2]),
-    cogsMin: num(r[3]),
-    cogsMax: num(r[4]),
-    unitsMin: num(r[5]),
-    unitsMax: num(r[6]),
-    weightMin: num(r[7]),
-    weightMax: num(r[8]),
+    categoryId: str(r[2]),
+    categoryName: str(r[3]),
+    cogsMin: num(r[4]),
+    cogsMax: num(r[5]),
+    unitsMin: num(r[6]),
+    unitsMax: num(r[7]),
+    weightMin: num(r[8]),
+    weightMax: num(r[9]),
+    isActive: r[10] !== undefined ? bool(r[10]) : true,
+    createdBy: str(r[11]),
+    createDt: str(r[12]),
+    updatedBy: nullStr(r[13]),
+    updateDt: nullStr(r[14]),
   }));
 }
 
 export async function saveThresholdsBrand(rows: ThresholdsBrand[]): Promise<void> {
   const data = rows.map((r) => [
-    r.brandId,
-    r.brandName,
-    r.categoryName,
-    r.cogsMin ?? "",
-    r.cogsMax ?? "",
-    r.unitsMin ?? "",
-    r.unitsMax ?? "",
-    r.weightMin ?? "",
-    r.weightMax ?? "",
+    r.brandId, r.brandName, r.categoryId, r.categoryName,
+    r.cogsMin ?? "", r.cogsMax ?? "",
+    r.unitsMin ?? "", r.unitsMax ?? "",
+    r.weightMin ?? "", r.weightMax ?? "",
+    String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.ThresholdsBrand, SHEET_HEADERS.ThresholdsBrand, data);
 }
 
 // ─── ProductConfigGlobal ──────────────────────────────────────────────────────
+// Columns: id(0) standard_shelf_life_pct(1) op_shelf_life_pct(2) standard_enabled(3)
+//          op_enabled(4) is_active(5) created_by(6) create_dt(7) updated_by(8) update_dt(9)
 export async function getProductConfigGlobal(): Promise<ProductConfigGlobal> {
   const rows = await readSheet(SHEET_NAMES.ProductConfigGlobal);
   if (rows.length <= 1) {
     return {
+      id: "global",
       standardShelfLifePct: 30,
       opShelfLifePct: 50,
       standardEnabled: true,
       opEnabled: true,
-      updatedAt: "",
+      isActive: true,
+      createdBy: "", createDt: "", updatedBy: null, updateDt: "",
     };
   }
   const r = rows[1];
   return {
-    standardShelfLifePct: num(r[0]) ?? 30,
-    opShelfLifePct: num(r[1]) ?? 50,
-    standardEnabled: bool(r[2]),
-    opEnabled: bool(r[3]),
-    updatedAt: str(r[4]),
+    id: str(r[0]) || "global",
+    standardShelfLifePct: num(r[1]) ?? 30,
+    opShelfLifePct: num(r[2]) ?? 50,
+    standardEnabled: bool(r[3]),
+    opEnabled: bool(r[4]),
+    isActive: r[5] !== undefined ? bool(r[5]) : true,
+    createdBy: str(r[6]),
+    createDt: str(r[7]),
+    updatedBy: nullStr(r[8]),
+    updateDt: str(r[9]),
   };
 }
 
 export async function saveProductConfigGlobal(config: ProductConfigGlobal): Promise<void> {
-  const rows = [
-    [
-      config.standardShelfLifePct,
-      config.opShelfLifePct,
-      String(config.standardEnabled),
-      String(config.opEnabled),
-      config.updatedAt,
-    ],
-  ];
+  const rows = [[
+    config.id,
+    config.standardShelfLifePct,
+    config.opShelfLifePct,
+    String(config.standardEnabled),
+    String(config.opEnabled),
+    String(config.isActive),
+    config.createdBy, config.createDt, config.updatedBy ?? "", config.updateDt,
+  ]];
   await clearAndWriteSheet(SHEET_NAMES.ProductConfigGlobal, SHEET_HEADERS.ProductConfigGlobal, rows);
 }
 
-// ─── BrandShelfLife ───────────────────────────────────────────────────────────
-export async function getBrandShelfLife(): Promise<BrandShelfLife[]> {
-  const rows = await readSheet(SHEET_NAMES.BrandShelfLife);
+// ─── Brands ───────────────────────────────────────────────────────────────────
+// Columns: id(0) name(1) category_id(2) shelf_life_override_pct(3) is_active(4)
+//          created_by(5) create_dt(6) updated_by(7) update_dt(8)
+export async function getBrands(): Promise<Brand[]> {
+  const rows = await readSheet(SHEET_NAMES.Brands);
   if (rows.length <= 1) return [];
   return rows.slice(1).map((r) => ({
-    brandId: str(r[0]),
-    brandName: str(r[1]),
+    id: str(r[0]),
+    name: str(r[1]),
     categoryId: str(r[2]),
-    categoryName: str(r[3]),
-    shelfLifeOverridePct: num(r[4]),
-    isActive: bool(r[5]),
+    shelfLifeOverridePct: num(r[3]),
+    isActive: bool(r[4]),
+    createdBy: str(r[5]),
+    createDt: str(r[6]),
+    updatedBy: nullStr(r[7]),
+    updateDt: nullStr(r[8]),
   }));
 }
 
-export async function saveBrandShelfLife(rows: BrandShelfLife[]): Promise<void> {
+export async function saveBrands(rows: Brand[]): Promise<void> {
   const data = rows.map((r) => [
-    r.brandId,
-    r.brandName,
-    r.categoryId,
-    r.categoryName,
-    r.shelfLifeOverridePct ?? "",
-    String(r.isActive),
+    r.id, r.name, r.categoryId,
+    r.shelfLifeOverridePct ?? "", String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
   ]);
-  await clearAndWriteSheet(SHEET_NAMES.BrandShelfLife, SHEET_HEADERS.BrandShelfLife, data);
+  await clearAndWriteSheet(SHEET_NAMES.Brands, SHEET_HEADERS.Brands, data);
 }
 
 // ─── SKUs ─────────────────────────────────────────────────────────────────────
+// Columns: id(0) name(1) brand_id(2) brand_name(3) category_id(4) category_name(5)
+//          type(6) shelf_life_override_pct(7) is_ignored(8) is_active(9) stock_units(10)
+//          created_by(11) create_dt(12) updated_by(13) update_dt(14)
 export async function getSKUs(): Promise<SKU[]> {
   const rows = await readSheet(SHEET_NAMES.SKUs);
   if (rows.length <= 1) return [];
@@ -624,92 +754,116 @@ export async function getSKUs(): Promise<SKU[]> {
     type: (r[6] === "op" ? "op" : "standard") as "standard" | "op",
     shelfLifeOverridePct: num(r[7]),
     isIgnored: bool(r[8]),
-    stockUnits: num(r[9]) ?? 0,
+    isActive: bool(r[9]),
+    stockUnits: num(r[10]) ?? 0,
+    createdBy: str(r[11]),
+    createDt: str(r[12]),
+    updatedBy: nullStr(r[13]),
+    updateDt: nullStr(r[14]),
   }));
 }
 
 export async function saveSKUs(rows: SKU[]): Promise<void> {
   const data = rows.map((r) => [
-    r.id,
-    r.name,
-    r.brandId,
-    r.brandName,
-    r.categoryId,
-    r.categoryName,
-    r.type,
-    r.shelfLifeOverridePct ?? "",
-    String(r.isIgnored),
-    r.stockUnits,
+    r.id, r.name, r.brandId, r.brandName, r.categoryId, r.categoryName,
+    r.type, r.shelfLifeOverridePct ?? "",
+    String(r.isIgnored), String(r.isActive), r.stockUnits,
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.SKUs, SHEET_HEADERS.SKUs, data);
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
+// Columns: id(0) name(1) shelf_life_override_pct(2) is_active(3)
+//          created_by(4) create_dt(5) updated_by(6) update_dt(7)
 export async function getCategories(): Promise<Category[]> {
   const rows = await readSheet(SHEET_NAMES.Categories);
   if (rows.length <= 1) return [];
   return rows.slice(1).map((r) => ({
     id: str(r[0]),
     name: str(r[1]),
-    skuCount: num(r[2]) ?? 0,
+    shelfLifeOverridePct: num(r[2]),
+    isActive: bool(r[3]),
+    createdBy: str(r[4]),
+    createDt: str(r[5]),
+    updatedBy: nullStr(r[6]),
+    updateDt: nullStr(r[7]),
   }));
 }
 
 export async function saveCategories(rows: Category[]): Promise<void> {
-  const data = rows.map((r) => [r.id, r.name, r.skuCount]);
+  const data = rows.map((r) => [
+    r.id, r.name, r.shelfLifeOverridePct ?? "", String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
+  ]);
   await clearAndWriteSheet(SHEET_NAMES.Categories, SHEET_HEADERS.Categories, data);
 }
 
-// ─── Brands ───────────────────────────────────────────────────────────────────
-export async function getBrands(): Promise<Brand[]> {
-  const rows = await readSheet(SHEET_NAMES.Brands);
-  if (rows.length <= 1) return [];
-  return rows.slice(1).map((r) => ({
+// ─── InventoryConditions ──────────────────────────────────────────────────────
+// Columns: id(0) condition_type(1) description(2) is_enabled(3) is_active(4)
+//          created_by(5) create_dt(6) updated_by(7) update_dt(8)
+const DEFAULT_CONDITIONS: InventoryCondition[] = [
+  { id: "cond_good",    conditionType: "good",    description: "", isEnabled: false, isActive: true, createdBy: "system", createDt: "", updatedBy: null, updateDt: null },
+  { id: "cond_damaged", conditionType: "damaged", description: "", isEnabled: false, isActive: true, createdBy: "system", createDt: "", updatedBy: null, updateDt: null },
+  { id: "cond_expired", conditionType: "expired", description: "", isEnabled: false, isActive: true, createdBy: "system", createDt: "", updatedBy: null, updateDt: null },
+];
+
+export async function getInventoryConditions(): Promise<InventoryCondition[]> {
+  const rows = await readSheet(SHEET_NAMES.InventoryConditions);
+  if (rows.length <= 1) return DEFAULT_CONDITIONS;
+  const saved = rows.slice(1).map((r) => ({
     id: str(r[0]),
-    name: str(r[1]),
-    categoryId: str(r[2]),
-    categoryName: str(r[3]),
-    skuCount: num(r[4]) ?? 0,
+    conditionType: str(r[1]) as InventoryCondition["conditionType"],
+    description: str(r[2]),
+    isEnabled: bool(r[3]),
+    isActive: bool(r[4]),
+    createdBy: str(r[5]),
+    createDt: str(r[6]),
+    updatedBy: nullStr(r[7]),
+    updateDt: nullStr(r[8]),
   }));
+  return DEFAULT_CONDITIONS.map(
+    (d) => saved.find((s) => s.conditionType === d.conditionType) ?? d
+  );
 }
 
-export async function saveBrands(rows: Brand[]): Promise<void> {
-  const data = rows.map((r) => [r.id, r.name, r.categoryId, r.categoryName, r.skuCount]);
-  await clearAndWriteSheet(SHEET_NAMES.Brands, SHEET_HEADERS.Brands, data);
+export async function saveInventoryConditions(rows: InventoryCondition[]): Promise<void> {
+  const data = rows.map((r) => [
+    r.id, r.conditionType, r.description,
+    String(r.isEnabled), String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
+  ]);
+  await clearAndWriteSheet(SHEET_NAMES.InventoryConditions, SHEET_HEADERS.InventoryConditions, data);
 }
 
-// ─── Batches ──────────────────────────────────────────────────────────────────
+// ─── Batches (maps to batch_runs DB table) ────────────────────────────────────
+// Columns: id(0) master_sink_id(1) master_sink_name(2) status(3) generated_at(4)
+//          committed_by(5) committed_at(6) is_active(7)
+//          created_by(8) create_dt(9) updated_by(10) update_dt(11)
 export async function getBatches(): Promise<Batch[]> {
   const rows = await readSheet(SHEET_NAMES.Batches);
   if (rows.length <= 1) return [];
   return rows.slice(1).map((r) => ({
     id: str(r[0]),
-    engineVersion: str(r[1]),
+    masterSinkId: str(r[1]),
     masterSinkName: str(r[2]),
     status: str(r[3]) as Batch["status"],
     generatedAt: str(r[4]),
-    committedAt: r[5] && r[5] !== "" ? str(r[5]) : null,
-    totalOrders: num(r[6]) ?? 0,
-    totalSkus: num(r[7]) ?? 0,
-    totalUnits: num(r[8]) ?? 0,
-    totalCogs: num(r[9]) ?? 0,
-    totalWeight: num(r[10]) ?? 0,
+    committedBy: nullStr(r[5]),
+    committedAt: nullStr(r[6]),
+    isActive: r[7] !== undefined ? bool(r[7]) : true,
+    createdBy: str(r[8]),
+    createDt: str(r[9]),
+    updatedBy: nullStr(r[10]),
+    updateDt: nullStr(r[11]),
   }));
 }
 
 export async function saveBatches(rows: Batch[]): Promise<void> {
   const data = rows.map((r) => [
-    r.id,
-    r.engineVersion,
-    r.masterSinkName,
-    r.status,
-    r.generatedAt,
-    r.committedAt ?? "",
-    r.totalOrders,
-    r.totalSkus,
-    r.totalUnits,
-    r.totalCogs,
-    r.totalWeight,
+    r.id, r.masterSinkId, r.masterSinkName, r.status, r.generatedAt,
+    r.committedBy ?? "", r.committedAt ?? "", String(r.isActive),
+    r.createdBy, r.createDt, r.updatedBy ?? "", r.updateDt ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.Batches, SHEET_HEADERS.Batches, data);
 }
@@ -736,17 +890,10 @@ export async function getTransferOrders(batchId?: string): Promise<TransferOrder
 
 export async function saveTransferOrders(rows: TransferOrder[]): Promise<void> {
   const data = rows.map((r) => [
-    r.id,
-    r.batchId,
-    r.type,
-    r.sourceWarehouseId,
-    r.sourceName,
-    r.destinationWarehouseId,
-    r.destinationName,
-    r.units,
-    r.cogs,
-    r.weight,
-    r.status,
+    r.id, r.batchId, r.type,
+    r.sourceWarehouseId, r.sourceName,
+    r.destinationWarehouseId, r.destinationName,
+    r.units, r.cogs, r.weight, r.status,
   ]);
   await clearAndWriteSheet(SHEET_NAMES.TransferOrders, SHEET_HEADERS.TransferOrders, data);
 }
@@ -762,20 +909,15 @@ export async function getOrderLineItems(orderId?: string): Promise<OrderLineItem
     skuName: str(r[3]),
     units: num(r[4]) ?? 0,
     cogs: num(r[5]) ?? 0,
-    expiryDate: r[6] && r[6] !== "" ? str(r[6]) : null,
+    expiryDate: nullStr(r[6]),
   }));
   return orderId ? all.filter((li) => li.orderId === orderId) : all;
 }
 
 export async function saveOrderLineItems(rows: OrderLineItem[]): Promise<void> {
   const data = rows.map((r) => [
-    r.id,
-    r.orderId,
-    r.skuId,
-    r.skuName,
-    r.units,
-    r.cogs,
-    r.expiryDate ?? "",
+    r.id, r.orderId, r.skuId, r.skuName,
+    r.units, r.cogs, r.expiryDate ?? "",
   ]);
   await clearAndWriteSheet(SHEET_NAMES.OrderLineItems, SHEET_HEADERS.OrderLineItems, data);
 }
@@ -789,7 +931,7 @@ export async function getPendingChanges(): Promise<PendingChange[]> {
     module: str(r[1]),
     entity: str(r[2]),
     op: str(r[3]) as PendingChange["op"],
-    targetId: r[4] && r[4] !== "" ? str(r[4]) : null,
+    targetId: nullStr(r[4]),
     payload: (() => {
       try {
         return JSON.parse(r[5]) as Record<string, unknown>;
@@ -805,7 +947,6 @@ export async function stageChange(change: PendingChange): Promise<void> {
   const existing = await getPendingChanges();
 
   let filtered = existing.filter((c) => {
-    // Remove any row with same module+entity+targetId
     const sameKey =
       c.module === change.module &&
       c.entity === change.entity &&
@@ -813,7 +954,6 @@ export async function stageChange(change: PendingChange): Promise<void> {
     return !sameKey;
   });
 
-  // For master_sink entity: only one staged change at a time — remove all prior
   if (change.entity === "master_sink") {
     filtered = filtered.filter((c) => c.entity !== "master_sink");
   }
@@ -821,13 +961,8 @@ export async function stageChange(change: PendingChange): Promise<void> {
   filtered.push(change);
 
   const data = filtered.map((c) => [
-    c.id,
-    c.module,
-    c.entity,
-    c.op,
-    c.targetId ?? "",
-    JSON.stringify(c.payload),
-    c.createdAt,
+    c.id, c.module, c.entity, c.op,
+    c.targetId ?? "", JSON.stringify(c.payload), c.createdAt,
   ]);
   await clearAndWriteSheet(SHEET_NAMES.PendingChanges, SHEET_HEADERS.PendingChanges, data);
 }
@@ -837,30 +972,32 @@ export async function discardPendingChanges(): Promise<void> {
 }
 
 // ─── AuditLog ─────────────────────────────────────────────────────────────────
+// Columns: id(0) event_dt(1) module(2) action(3) entity(4) entity_id(5) summary(6)
+//          user_id(7) session_id(8) before_json(9) after_json(10) created_by(11) create_dt(12)
 export async function clearAuditLog(): Promise<void> {
   await clearAndWriteSheet(SHEET_NAMES.AuditLog, SHEET_HEADERS.AuditLog, []);
 }
 
 export async function appendAuditLog(entry: AuditEntry): Promise<void> {
   const rows = await readSheet(SHEET_NAMES.AuditLog);
-  // If sheet is empty (no header row), write header first
   if (rows.length === 0) {
     await writeSheet(SHEET_NAMES.AuditLog, [SHEET_HEADERS.AuditLog]);
   }
-  await appendToSheet(SHEET_NAMES.AuditLog, [
-    [
-      entry.id,
-      entry.timestamp,
-      entry.module,
-      entry.action,
-      entry.entity,
-      entry.summary,
-      entry.userId,
-      entry.beforeJson,
-      entry.afterJson,
-      entry.sessionId,
-    ],
-  ]);
+  await appendToSheet(SHEET_NAMES.AuditLog, [[
+    entry.id,
+    entry.eventDt,
+    entry.module,
+    entry.action,
+    entry.entity,
+    entry.entityId ?? "",
+    entry.summary,
+    entry.userId,
+    entry.sessionId,
+    entry.beforeJson,
+    entry.afterJson,
+    entry.createdBy,
+    entry.createDt,
+  ]]);
 }
 
 export async function getAuditLog(): Promise<AuditEntry[]> {
@@ -868,14 +1005,17 @@ export async function getAuditLog(): Promise<AuditEntry[]> {
   if (rows.length <= 1) return [];
   return rows.slice(1).map((r) => ({
     id: str(r[0]),
-    timestamp: str(r[1]),
+    eventDt: str(r[1]),
     module: str(r[2]),
     action: str(r[3]),
     entity: str(r[4]),
-    summary: str(r[5]),
-    userId: str(r[6]),
-    beforeJson: str(r[7]),
-    afterJson: str(r[8]),
-    sessionId: str(r[9]),
+    entityId: nullStr(r[5]),
+    summary: str(r[6]),
+    userId: str(r[7]),
+    sessionId: str(r[8]),
+    beforeJson: str(r[9]),
+    afterJson: str(r[10]),
+    createdBy: str(r[11]),
+    createDt: str(r[12]),
   }));
 }

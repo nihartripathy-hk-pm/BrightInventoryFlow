@@ -21,6 +21,9 @@ export async function commitBatchAction(
 
   batch.status = "committed";
   batch.committedAt = now;
+  batch.committedBy = "prototype_user";
+  batch.updatedBy = "prototype_user";
+  batch.updateDt = now;
   await saveBatches(batches);
 
   const orders = await getTransferOrders(batchId);
@@ -37,15 +40,18 @@ export async function commitBatchAction(
 
   await appendAuditLog({
     id: randomUUID(),
-    timestamp: now,
+    eventDt: now,
     module: "transfer_approval",
     action: "batch_committed",
-    entity: batchId,
+    entity: "batch_runs",
+    entityId: batchId,
     summary: `Batch ${batchId} authorized and committed. Orders now in transit.`,
     userId: "prototype_user",
+    sessionId: "sess_prototype",
     beforeJson: JSON.stringify({ status: "pending_approval" }),
     afterJson: JSON.stringify({ status: "committed" }),
-    sessionId: "sess_prototype",
+    createdBy: "prototype_user",
+    createDt: now,
   });
 
   revalidatePath("/approval");
@@ -66,15 +72,18 @@ export async function rejectBatchAction(batchId: string): Promise<void> {
 
   await appendAuditLog({
     id: randomUUID(),
-    timestamp: now,
+    eventDt: now,
     module: "transfer_approval",
     action: "batch_rejected",
-    entity: batchId,
+    entity: "batch_runs",
+    entityId: batchId,
     summary: `Batch ${batchId} rejected.`,
     userId: "prototype_user",
+    sessionId: "sess_prototype",
     beforeJson: JSON.stringify({ status: "pending_approval" }),
     afterJson: JSON.stringify({ status: "rejected" }),
-    sessionId: "sess_prototype",
+    createdBy: "prototype_user",
+    createDt: now,
   });
 
   revalidatePath("/approval");

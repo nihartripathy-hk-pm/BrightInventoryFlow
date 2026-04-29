@@ -130,22 +130,28 @@ function PendingApprovalTab({
           </span>
         </div>
         <p className="text-xs text-muted">
-          Generated {new Date(pendingBatch.generatedAt).toLocaleDateString('en-GB')} &middot; Engine{" "}
-          {pendingBatch.engineVersion} &middot; Sink: {pendingBatch.masterSinkName}
+          Generated {new Date(pendingBatch.generatedAt).toLocaleDateString('en-GB')} &middot; Sink: {pendingBatch.masterSinkName}
         </p>
       </div>
 
-      {/* Stats grid */}
+      {/* Stats grid — computed from orders/line items */}
+      {(() => {
+        const batchLineItems = lineItems.filter((li) =>
+          batchOrders.some((o) => o.id === li.orderId)
+        );
+        const totalOrders = batchOrders.length;
+        const totalSkus = new Set(batchLineItems.map((li) => li.skuId)).size;
+        const totalUnits = batchLineItems.reduce((s, li) => s + li.units, 0);
+        const totalCogs = batchOrders.reduce((s, o) => s + o.cogs, 0);
+        const totalWeight = batchOrders.reduce((s, o) => s + o.weight, 0);
+        return (
       <div className="grid grid-cols-5 gap-2 mb-4">
         {[
-          { label: "Total Orders", value: pendingBatch.totalOrders },
-          { label: "Total SKUs", value: pendingBatch.totalSkus },
-          { label: "Total Units", value: pendingBatch.totalUnits },
-          {
-            label: "Total COGS",
-            value: `₹${(pendingBatch.totalCogs / 1000).toFixed(0)}K`,
-          },
-          { label: "Total Weight", value: `${pendingBatch.totalWeight} kg` },
+          { label: "Total Orders", value: totalOrders },
+          { label: "Total SKUs", value: totalSkus },
+          { label: "Total Units", value: totalUnits },
+          { label: "Total COGS", value: `₹${(totalCogs / 1000).toFixed(0)}K` },
+          { label: "Total Weight", value: `${totalWeight} kg` },
         ].map(({ label, value }) => (
           <div key={label} className="bg-row rounded-lg p-3 text-center">
             <p className="text-xs text-muted uppercase tracking-wide">{label}</p>
@@ -153,6 +159,8 @@ function PendingApprovalTab({
           </div>
         ))}
       </div>
+        );
+      })()}
 
       {/* Two-column layout */}
       <div className="flex gap-4">
@@ -543,7 +551,7 @@ function ManageTransactionsTab({ orders }: { orders: TransferOrder[] }) {
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
-                      title="Locked"
+                      aria-label="Locked"
                     >
                       <path
                         strokeLinecap="round"

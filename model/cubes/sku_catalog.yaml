@@ -1,0 +1,220 @@
+cubes:
+  - name: sku_catalog
+    sql_table: inventory.skus
+    data_source: redshift_source
+
+    joins:
+      - name: brands
+        sql: "{sku_catalog}.brand_id = {brands}.id"
+        relationship: many_to_one
+
+      - name: categories
+        sql: "{sku_catalog}.category_id = {categories}.id"
+        relationship: many_to_one
+
+    dimensions:
+
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: SKU unique ID.
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+        description: SKU display name.
+
+      - name: brand_id
+        sql: "{CUBE}.brand_id"
+        type: string
+        description: Parent brand ID.
+
+      - name: brand_name
+        sql: "{CUBE}.brand_name"
+        type: string
+        description: Parent brand name (denormalised for query convenience).
+
+      - name: category_id
+        sql: "{CUBE}.category_id"
+        type: string
+        description: Parent category ID.
+
+      - name: category_name
+        sql: "{CUBE}.category_name"
+        type: string
+        description: Parent category name (denormalised for query convenience).
+
+      - name: type
+        sql: "{CUBE}.type"
+        type: string
+        description: SKU type — 'standard' or 'op'.
+
+      - name: is_ignored
+        sql: "{CUBE}.is_ignored"
+        type: boolean
+        description: Whether the SKU is excluded from transfer logic.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+        description: FALSE when soft-deleted.
+
+      - name: shelf_life_override_pct
+        sql: "{CUBE}.shelf_life_override_pct"
+        type: number
+        description: SKU-level shelf-life override percentage. NULL = fall through to brand.
+
+      - name: brand_shelf_life_override_pct
+        sql: "{brands}.shelf_life_override_pct"
+        type: number
+        description: Brand-level shelf-life override. NULL = fall through to category.
+
+      - name: category_shelf_life_override_pct
+        sql: "{categories}.shelf_life_override_pct"
+        type: number
+        description: Category-level shelf-life override. NULL = use global default.
+
+      - name: effective_shelf_life_source
+        sql: >
+          CASE
+            WHEN {CUBE}.shelf_life_override_pct IS NOT NULL THEN 'SKU'
+            WHEN {brands}.shelf_life_override_pct IS NOT NULL THEN 'Brand'
+            WHEN {categories}.shelf_life_override_pct IS NOT NULL THEN 'Category'
+            ELSE 'Global'
+          END
+        type: string
+        description: >
+          Which level drives the effective shelf-life for this SKU.
+          Precedence: SKU → Brand → Category → Global.
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+
+      - name: total_skus
+        type: count
+        description: Total SKU count.
+
+      - name: active_skus
+        sql: "CASE WHEN {CUBE}.is_active = TRUE AND {CUBE}.is_ignored = FALSE THEN 1 ELSE 0 END"
+        type: sum
+        description: SKUs that are active and not ignored.
+
+      - name: ignored_skus
+        sql: "CASE WHEN {CUBE}.is_ignored THEN 1 ELSE 0 END"
+        type: sum
+        description: SKUs flagged as ignored.
+
+      - name: standard_skus
+        sql: "CASE WHEN {CUBE}.type = 'standard' THEN 1 ELSE 0 END"
+        type: sum
+        description: Count of standard-type SKUs.
+
+      - name: op_skus
+        sql: "CASE WHEN {CUBE}.type = 'op' THEN 1 ELSE 0 END"
+        type: sum
+        description: Count of OP-type SKUs.
+
+      - name: total_stock_units
+        sql: "{CUBE}.stock_units"
+        type: sum
+        description: Total stock units across all SKUs.
+
+      - name: skus_with_sku_override
+        sql: "CASE WHEN {CUBE}.shelf_life_override_pct IS NOT NULL THEN 1 ELSE 0 END"
+        type: sum
+        description: SKUs with a SKU-level shelf-life override set.
+
+    segments:
+      - name: active_only
+        sql: "{CUBE}.is_active = TRUE AND {CUBE}.is_ignored = FALSE"
+
+      - name: standard_type
+        sql: "{CUBE}.type = 'standard'"
+
+      - name: op_type
+        sql: "{CUBE}.type = 'op'"
+
+      - name: has_override
+        sql: "{CUBE}.shelf_life_override_pct IS NOT NULL"
+
+---
+cubes:
+  - name: brands
+    sql_table: inventory.brands
+    data_source: redshift_source
+
+    dimensions:
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+
+      - name: category_id
+        sql: "{CUBE}.category_id"
+        type: string
+
+      - name: shelf_life_override_pct
+        sql: "{CUBE}.shelf_life_override_pct"
+        type: number
+        description: Brand-level shelf-life override. NULL = fall through to category.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+      - name: total_brands
+        type: count
+
+      - name: brands_with_override
+        sql: "CASE WHEN {CUBE}.shelf_life_override_pct IS NOT NULL THEN 1 ELSE 0 END"
+        type: sum
+        description: Brands with a shelf-life override configured.
+
+  - name: categories
+    sql_table: inventory.categories
+    data_source: redshift_source
+
+    dimensions:
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+
+      - name: shelf_life_override_pct
+        sql: "{CUBE}.shelf_life_override_pct"
+        type: number
+        description: Category-level shelf-life override. NULL = use global default.
+
+      - name: is_active
+        sql: "{CUBE}.is_active"
+        type: boolean
+
+      - name: updated_at
+        sql: "{CUBE}.update_dt"
+        type: time
+
+    measures:
+      - name: total_categories
+        type: count
+
+      - name: categories_with_override
+        sql: "CASE WHEN {CUBE}.shelf_life_override_pct IS NOT NULL THEN 1 ELSE 0 END"
+        type: sum
+        description: Categories with a shelf-life override configured.

@@ -266,9 +266,9 @@ function GlobalTab({
         </div>
       </div>
 
-      {globalThresholds.updatedAt && (
+      {globalThresholds.updateDt && (
         <p className="text-xs text-muted-dark mt-3">
-          Last updated: {globalThresholds.updatedAt}
+          Last updated: {globalThresholds.updateDt}
         </p>
       )}
     </div>
@@ -565,8 +565,8 @@ function BrandRow({
     >
       <td className="py-3 pr-4">
         <div className="font-medium text-primary">{brand.name}</div>
-        <div className="text-xs text-muted-dark mt-0.5">
-          {brand.categoryName}
+        <div className="text-xs text-muted-dark mt-0.5 font-mono">
+          {brand.categoryId}
         </div>
         <div className="text-xs text-muted font-mono">{brand.id}</div>
       </td>
