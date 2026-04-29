@@ -268,3 +268,28 @@ CREATE TABLE inventory.batches (
 )
 DISTKEY (master_id)
 SORTKEY (master_id, generated_at);
+
+
+-- ─────────────────────────────────────────────
+-- AUDIT LOG  (append-only — no updated_by / update_dt / is_active)
+-- One row per config change event, plus one aggregate row per commit session.
+-- session_id links per-change rows to their configuration_committed row.
+-- ─────────────────────────────────────────────
+
+CREATE TABLE inventory.audit_log (
+    id              VARCHAR(100)  NOT NULL,
+    event_dt        TIMESTAMP     NOT NULL,
+    module          VARCHAR(50)   NOT NULL,   -- 'warehouse_setup' | 'transfer_thresholds' | 'product_config' | 'draft'
+    action          VARCHAR(100)  NOT NULL,   -- e.g. 'donor_participation_updated', 'sku_ignored', 'configuration_committed'
+    entity          VARCHAR(100)  NOT NULL,   -- entity type (donor_participation, sku_config, global_threshold, etc.)
+    entity_id       VARCHAR(100),             -- targetId from PendingChange; NULL for aggregate commit entries
+    summary         VARCHAR(1000),
+    user_id         VARCHAR(100)  NOT NULL,
+    session_id      VARCHAR(100),
+    before_json     VARCHAR(65535),
+    after_json      VARCHAR(65535),
+    created_by      VARCHAR(100)  NOT NULL,
+    create_dt       TIMESTAMP     NOT NULL DEFAULT GETDATE()
+)
+DISTKEY (module)
+SORTKEY (event_dt, module);

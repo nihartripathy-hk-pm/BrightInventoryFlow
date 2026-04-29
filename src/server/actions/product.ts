@@ -27,7 +27,6 @@ export async function saveBrandShelfLifeAction(
   brandId: string,
   brandName: string,
   categoryId: string,
-  categoryName: string,
   shelfLifeOverridePct: number | null,
   isActive: boolean
 ): Promise<void> {
@@ -39,7 +38,7 @@ export async function saveBrandShelfLifeAction(
     entity: "brand_shelf_life",
     op: "set",
     targetId: brandId,
-    payload: { brandId, brandName, categoryId, categoryName, shelfLifeOverridePct, isActive },
+    payload: { brandId, brandName, categoryId, shelfLifeOverridePct, isActive },
     createdAt: now,
   });
 
@@ -61,6 +60,23 @@ export async function saveSKUConfigAction(
     targetId: skuId,
     payload: { skuId, shelfLifeOverridePct, isIgnored },
     createdAt: now,
+  });
+
+  revalidatePath("/product");
+}
+
+export async function saveInventoryConditionAction(
+  condition: "good" | "damaged" | "expired",
+  enabled: boolean
+): Promise<void> {
+  await stageChange({
+    id: randomUUID(),
+    module: "product_config",
+    entity: "inventory_condition",
+    op: "set",
+    targetId: condition,
+    payload: { condition, enabled },
+    createdAt: new Date().toISOString(),
   });
 
   revalidatePath("/product");
