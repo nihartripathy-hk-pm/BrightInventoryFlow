@@ -53,10 +53,24 @@ export default async function WarehousePage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-primary">Warehouse Setup</h1>
-        <p className="text-muted text-sm mt-1">
-          Configure routing destinations and donor participation
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-primary">Warehouse Setup</h1>
+            <p className="text-muted text-sm mt-1">
+              Configure routing destinations and donor participation
+            </p>
+          </div>
+          {effectiveSinkId && (
+            <span className="flex items-center gap-1.5 text-xs text-accent bg-accent/10 px-3 py-1.5 rounded-full border border-accent/20 whitespace-nowrap flex-shrink-0">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+              </svg>
+              Master Sink:{" "}
+              {activeWarehouses.find((w) => w.id === effectiveSinkId)?.name ?? effectiveSinkId}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3 mt-4 flex-wrap">
           <span className="text-xs text-muted bg-row px-3 py-1.5 rounded-full border border-border">
             {activeWarehouses.length} warehouses
@@ -69,13 +83,6 @@ export default async function WarehousePage() {
               participating}{" "}
             bypassed
           </span>
-          {effectiveSinkId && (
-            <span className="text-xs text-accent bg-accent/10 px-3 py-1.5 rounded-full border border-accent/20">
-              Sink:{" "}
-              {activeWarehouses.find((w) => w.id === effectiveSinkId)?.name ??
-                effectiveSinkId}
-            </span>
-          )}
         </div>
       </div>
       <WarehouseTabs

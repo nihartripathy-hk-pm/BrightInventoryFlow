@@ -282,7 +282,10 @@ const num = (v: string): number | null => {
   const n = parseFloat(v);
   return isNaN(n) ? null : n;
 };
-const bool = (v: string): boolean => v === "true" || v === "TRUE";
+const bool = (v: string): boolean => {
+  const s = (v ?? "").toString().trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+};
 const str = (v: string | undefined): string => v ?? "";
 const nullStr = (v: string | undefined): string | null =>
   v && v !== "" ? v : null;
@@ -751,7 +754,7 @@ export async function getSKUs(): Promise<SKU[]> {
     brandName: str(r[3]),
     categoryId: str(r[4]),
     categoryName: str(r[5]),
-    type: (r[6] === "op" ? "op" : "standard") as "standard" | "op",
+    type: (str(r[6]).toLowerCase() === "op" ? "op" : "standard") as "standard" | "op",
     shelfLifeOverridePct: num(r[7]),
     isIgnored: bool(r[8]),
     isActive: bool(r[9]),
