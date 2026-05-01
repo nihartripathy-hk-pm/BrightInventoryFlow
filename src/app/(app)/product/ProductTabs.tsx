@@ -477,8 +477,8 @@ function SKUConfigTab({
               return (
                 <tr key={sku.id} className="border-b border-border hover:bg-row/50 transition-colors">
                   {/* SKU */}
-                  <td className="px-4 py-3 max-w-[200px]">
-                    <p className="font-medium text-primary truncate">{sku.name}</p>
+                  <td className="px-4 py-3 max-w-[280px]">
+                    <p className="font-medium text-primary">{sku.name}</p>
                     <p className="text-xs text-muted font-mono">{sku.id}</p>
                   </td>
 
