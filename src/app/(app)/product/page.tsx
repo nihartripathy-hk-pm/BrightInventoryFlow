@@ -1,12 +1,12 @@
-import { getProductConfigGlobal, getBrandShelfLife, getSKUs, getBrands, getCategories } from "@/lib/gsheets";
+import { getProductConfigGlobal, getSKUs, getBrands, getInventoryConditions } from "@/lib/gsheets";
 import { ProductTabs } from "./ProductTabs";
 
 export default async function ProductPage() {
-  const [config, brandShelfLife, skus, brands, categories] = await Promise.all([
-    getProductConfigGlobal(), getBrandShelfLife(), getSKUs(), getBrands(), getCategories()
+  const [config, skus, brands, inventoryConditions] = await Promise.all([
+    getProductConfigGlobal(), getSKUs(), getBrands(), getInventoryConditions()
   ]);
 
-  const brandOverrides = brandShelfLife.filter(b => b.isActive).length;
+  const brandOverrides = brands.filter(b => b.isActive && b.shelfLifeOverridePct !== null).length;
   const skuOverrides = skus.filter(s => s.shelfLifeOverridePct !== null).length;
   const ignoredSkus = skus.filter(s => s.isIgnored).length;
 
@@ -15,7 +15,7 @@ export default async function ProductPage() {
       <div className="mb-6 flex items-start justify-between gap-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary">Product Configuration</h1>
-          <p className="text-muted text-sm mt-1">Shelf life thresholds · Eligibility rules · SKU overrides</p>
+          <p className="text-muted text-sm mt-1">Shelf life thresholds · Eligibility rules · SKU overrides · Inventory conditions</p>
         </div>
         <div className="flex items-start gap-8">
           <div className="text-right">
@@ -32,7 +32,7 @@ export default async function ProductPage() {
           </div>
         </div>
       </div>
-      <ProductTabs config={config} brandShelfLife={brandShelfLife} skus={skus} brands={brands} />
+      <ProductTabs config={config} skus={skus} brands={brands} inventoryConditions={inventoryConditions} />
     </div>
   );
 }

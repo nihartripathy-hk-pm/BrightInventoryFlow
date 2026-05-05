@@ -1,0 +1,86 @@
+cubes:
+  - name: audit_log
+    sql_table: inventory.audit_log
+    data_source: redshift_source
+
+    dimensions:
+      - name: id
+        sql: "{CUBE}.id"
+        type: string
+        primary_key: true
+        description: Audit event unique ID.
+
+      - name: event_dt
+        sql: "{CUBE}.event_dt"
+        type: time
+        description: When the audited event occurred.
+
+      - name: event_dt_daily
+        sql: "DATE_TRUNC('day', {CUBE}.event_dt)"
+        type: time
+        description: Event date truncated to day.
+
+      - name: event_dt_weekly
+        sql: "DATE_TRUNC('week', {CUBE}.event_dt)"
+        type: time
+        description: Event date truncated to week.
+
+      - name: event_dt_monthly
+        sql: "DATE_TRUNC('month', {CUBE}.event_dt)"
+        type: time
+        description: Event date truncated to month.
+
+      - name: module
+        sql: "{CUBE}.module"
+        type: string
+        description: "Module: warehouse_setup, transfer_thresholds, product_config, or draft."
+
+      - name: action
+        sql: "{CUBE}.action"
+        type: string
+        description: "Specific action name, e.g. donor_participation_updated, sku_ignored, configuration_committed."
+
+      - name: entity
+        sql: "{CUBE}.entity"
+        type: string
+        description: Entity type affected (e.g. donor_participation, sku_config, global_threshold).
+
+      - name: entity_id
+        sql: "{CUBE}.entity_id"
+        type: string
+        description: Target record ID from PendingChange.targetId. NULL for aggregate commit entries.
+
+      - name: user_id
+        sql: "{CUBE}.user_id"
+        type: string
+        description: ID of the user who triggered the event.
+
+      - name: session_id
+        sql: "{CUBE}.session_id"
+        type: string
+        description: Session identifier linking per-change entries to their aggregate commit entry.
+
+    measures:
+      - name: total_events
+        type: count
+        description: Total audit events recorded.
+
+      - name: commits_count
+        sql: "CASE WHEN {CUBE}.action = 'configuration_committed' THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of configuration_committed events.
+
+      - name: config_changes_count
+        sql: "CASE WHEN {CUBE}.action <> 'configuration_committed' THEN 1 ELSE 0 END"
+        type: sum
+        description: Number of individual config change events (excludes aggregate commits).
+
+    segments:
+      - name: last_30_days
+        sql: "{CUBE}.event_dt >= CURRENT_DATE - INTERVAL '30 days'"
+
+      - name: commits_only
+        sql: "{CUBE}.action = 'configuration_committed'"
+
+      - name: config_changes_only
+        sql: "{CUBE}.action <> 'configuration_committed'"

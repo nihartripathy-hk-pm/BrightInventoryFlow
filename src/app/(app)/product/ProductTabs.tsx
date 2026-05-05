@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ProductConfigGlobal, BrandShelfLife, SKU, Brand } from "@/lib/gsheets";
+import { ProductConfigGlobal, SKU, Brand, InventoryCondition } from "@/lib/gsheets";
 import { Toggle } from "@/components/ui/Toggle";
 import { InlineEditNumber } from "@/components/ui/InlineEditNumber";
 import { TabBar } from "@/components/ui/TabBar";
@@ -10,19 +10,21 @@ import {
   saveProductGlobalAction,
   saveBrandShelfLifeAction,
   saveSKUConfigAction,
+  saveInventoryConditionAction,
 } from "@/server/actions/product";
 
 interface Props {
   config: ProductConfigGlobal;
-  brandShelfLife: BrandShelfLife[];
   skus: SKU[];
   brands: Brand[];
+  inventoryConditions: InventoryCondition[];
 }
 
 const TABS = [
-  { key: "global", label: "Global Rules" },
-  { key: "brands", label: "Brand Overrides" },
-  { key: "skus",   label: "SKU Configuration" },
+  { key: "global",     label: "Global Rules" },
+  { key: "brands",     label: "Brand Overrides" },
+  { key: "skus",       label: "SKU Configuration" },
+  { key: "conditions", label: "Inventory Conditions" },
 ];
 
 /* ─────────────────────── Tab 1: Global Rules ─────────────────────── */
@@ -239,30 +241,28 @@ function GlobalRulesTab({
 
 function BrandOverridesTab({
   brands,
-  brandShelfLife,
   config,
 }: {
   brands: Brand[];
-  brandShelfLife: BrandShelfLife[];
   config: ProductConfigGlobal;
 }) {
   const [, startTransition] = useTransition();
 
-  function handleShelfLife(brand: Brand, currentOverride: BrandShelfLife | undefined, value: number | null) {
+  function handleShelfLife(brand: Brand, value: number | null) {
     startTransition(() => {
       saveBrandShelfLifeAction(
-        brand.id, brand.name, brand.categoryId, brand.categoryName,
+        brand.id, brand.name, brand.categoryId,
         value,
-        currentOverride?.isActive ?? (value !== null)
+        value !== null
       );
     });
   }
 
-  function handleToggle(brand: Brand, currentOverride: BrandShelfLife | undefined, newActive: boolean) {
+  function handleToggle(brand: Brand, newActive: boolean) {
     startTransition(() => {
       saveBrandShelfLifeAction(
-        brand.id, brand.name, brand.categoryId, brand.categoryName,
-        currentOverride?.shelfLifeOverridePct ?? null,
+        brand.id, brand.name, brand.categoryId,
+        brand.shelfLifeOverridePct,
         newActive
       );
     });
@@ -273,7 +273,7 @@ function BrandOverridesTab({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-row">
-            {["Brand", "Category", "Shelf Life Override", "SKUs Affected", "Status"].map((col) => (
+            {["Brand", "Category", "Shelf Life Override", "Status"].map((col) => (
               <th key={col} className="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">
                 {col}
               </th>
@@ -281,62 +281,50 @@ function BrandOverridesTab({
           </tr>
         </thead>
         <tbody>
-          {brands.map((brand) => {
-            const override = brandShelfLife.find((b) => b.brandId === brand.id);
-            const isActive = override?.isActive ?? false;
+          {brands.map((brand) => (
+            <tr key={brand.id} className="border-b border-border hover:bg-row/50 transition-colors">
+              {/* Brand */}
+              <td className="px-4 py-3">
+                <p className="font-medium text-primary">{brand.name}</p>
+                <p className="text-xs text-muted font-mono">{brand.id}</p>
+              </td>
 
-            return (
-              <tr key={brand.id} className="border-b border-border hover:bg-row/50 transition-colors">
-                {/* Brand */}
-                <td className="px-4 py-3">
-                  <p className="font-medium text-primary">{brand.name}</p>
-                  <p className="text-xs text-muted font-mono">{brand.id}</p>
-                </td>
+              {/* Category */}
+              <td className="px-4 py-3 text-sm text-muted font-mono">{brand.categoryId}</td>
 
-                {/* Category */}
-                <td className="px-4 py-3 text-sm text-muted">{brand.categoryName}</td>
+              {/* Shelf Life Override (inline edit) */}
+              <td className="px-4 py-3">
+                <InlineEditNumber
+                  value={brand.shelfLifeOverridePct}
+                  placeholder={`Global (${config.standardShelfLifePct}%)`}
+                  suffix="%"
+                  onSave={(value) => handleShelfLife(brand, value)}
+                />
+              </td>
 
-                {/* Shelf Life Override (inline edit) */}
-                <td className="px-4 py-3">
-                  <InlineEditNumber
-                    value={override?.shelfLifeOverridePct ?? null}
-                    placeholder={`Global (${config.standardShelfLifePct}%)`}
-                    suffix="%"
-                    onSave={(value) => handleShelfLife(brand, override, value)}
+              {/* Status toggle */}
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Toggle
+                    checked={brand.isActive}
+                    onChange={(val) => handleToggle(brand, val)}
                   />
-                </td>
-
-                {/* SKUs Affected */}
-                <td className="px-4 py-3 text-sm text-muted">
-                  {brand.skuCount != null ? (
-                    <span>{brand.skuCount} SKU{brand.skuCount !== 1 ? "s" : ""}</span>
-                  ) : "—"}
-                </td>
-
-                {/* Status toggle */}
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Toggle
-                      checked={isActive}
-                      onChange={(val) => handleToggle(brand, override, val)}
-                    />
-                    {isActive ? (
-                      <span className="text-xs bg-teal-900/30 text-teal-400 border border-teal-800/30 px-2 py-0.5 rounded-full">
-                        Brand Override
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">
-                        Using Global
-                      </span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
+                  {brand.isActive ? (
+                    <span className="text-xs bg-teal-900/30 text-teal-400 border border-teal-800/30 px-2 py-0.5 rounded-full">
+                      Brand Override
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">
+                      Using Global
+                    </span>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
           {brands.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-12 text-center text-muted text-sm">
+              <td colSpan={4} className="px-4 py-12 text-center text-muted text-sm">
                 No brands found.
               </td>
             </tr>
@@ -354,11 +342,11 @@ type TypeFilter = "all" | "standard" | "op";
 
 function SKUConfigTab({
   skus,
-  brandShelfLife,
+  brands,
   config,
 }: {
   skus: SKU[];
-  brandShelfLife: BrandShelfLife[];
+  brands: Brand[];
   config: ProductConfigGlobal;
 }) {
   const [, startTransition] = useTransition();
@@ -478,7 +466,7 @@ function SKUConfigTab({
           </thead>
           <tbody>
             {filtered.map((sku) => {
-              const brandOverride = brandShelfLife.find((b) => b.brandId === sku.brandId);
+              const brandOverride = brands.find((b) => b.id === sku.brandId);
               const source =
                 sku.shelfLifeOverridePct !== null
                   ? "sku"
@@ -489,8 +477,8 @@ function SKUConfigTab({
               return (
                 <tr key={sku.id} className="border-b border-border hover:bg-row/50 transition-colors">
                   {/* SKU */}
-                  <td className="px-4 py-3 max-w-[200px]">
-                    <p className="font-medium text-primary truncate">{sku.name}</p>
+                  <td className="px-4 py-3 max-w-[280px]">
+                    <p className="font-medium text-primary">{sku.name}</p>
                     <p className="text-xs text-muted font-mono">{sku.id}</p>
                   </td>
 
@@ -535,7 +523,7 @@ function SKUConfigTab({
                       </span>
                     ) : source === "brand" ? (
                       <span className="text-xs bg-blue-900/30 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">
-                        Brand ({brandOverride?.brandName})
+                        Brand ({brandOverride?.name})
                       </span>
                     ) : (
                       <span className="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">
@@ -579,9 +567,139 @@ function SKUConfigTab({
   );
 }
 
+/* ─────────────────────── Tab 4: Inventory Conditions ─────────────────────── */
+
+const CONDITION_META = {
+  good: {
+    label: "Good",
+    description: "Saleable inventory in full sellable condition.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    ),
+    dotColor: "bg-green-400",
+    activeDot: "bg-green-400",
+    inactiveDot: "bg-[#2d3748]",
+  },
+  damaged: {
+    label: "Damaged",
+    description: "Inventory with packaging or product damage — still movable.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+      </svg>
+    ),
+    dotColor: "bg-amber-400",
+    activeDot: "bg-amber-400",
+    inactiveDot: "bg-[#2d3748]",
+  },
+  expired: {
+    label: "Expired",
+    description: "Past expiry date. Requires special handling / disposal.",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    ),
+    dotColor: "bg-red-400",
+    activeDot: "bg-red-400",
+    inactiveDot: "bg-[#2d3748]",
+  },
+} as const;
+
+function InventoryConditionsTab({ initialConditions }: { initialConditions: InventoryCondition[] }) {
+  const [, startTransition] = useTransition();
+  const [conditions, setConditions] = useState(initialConditions);
+
+  function handleToggle(conditionType: InventoryCondition["conditionType"], isEnabled: boolean) {
+    setConditions((prev) =>
+      prev.map((c) => (c.conditionType === conditionType ? { ...c, isEnabled } : c))
+    );
+    startTransition(() => { saveInventoryConditionAction(conditionType, isEnabled); });
+  }
+
+  const enabledCount = conditions.filter((c) => c.isEnabled).length;
+
+  return (
+    <div className="space-y-4">
+      {/* Info banner */}
+      <div className="bg-card border border-border rounded-xl p-4 flex gap-3 border-l-2 border-l-accent">
+        <svg className="w-4 h-4 text-accent mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" d="M12 8v4m0 4h.01" />
+        </svg>
+        <p className="text-sm text-muted">
+          <span className="text-accent font-semibold">Inventory Condition Rules</span>{" "}
+          define which physical states of inventory are planned for movement in this liquidation run.
+          Enable a condition, then select the allowed disposition methods for it.
+        </p>
+      </div>
+
+      {/* Condition cards */}
+      <div className="space-y-3">
+        {conditions.map((c) => {
+          const meta = CONDITION_META[c.conditionType];
+          return (
+            <div key={c.conditionType} className="bg-card border border-border rounded-xl p-5 flex items-center gap-4">
+              {/* Icon */}
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                c.isEnabled ? "bg-accent/15 text-accent" : "bg-row text-muted"
+              }`}>
+                {meta.icon}
+              </div>
+
+              {/* Label + description */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-sm font-semibold text-primary">{meta.label}</span>
+                  {!c.isEnabled && (
+                    <span className="text-xs font-medium bg-red-900/30 text-red-400 border border-red-800/30 px-2 py-0.5 rounded-md">
+                      Out of Scope
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-muted">{meta.description}</p>
+              </div>
+
+              {/* Toggle */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-medium ${c.isEnabled ? "text-green-400" : "text-muted"}`}>
+                  {c.isEnabled ? "Enabled" : "Disabled"}
+                </span>
+                <Toggle checked={c.isEnabled} onChange={(val) => handleToggle(c.conditionType, val)} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Summary bar */}
+      <div className="bg-card border border-border rounded-xl flex items-stretch overflow-hidden">
+        <div className="px-5 py-3 flex items-center">
+          <span className="text-sm text-muted">
+            <span className="text-primary font-semibold">{enabledCount}</span> of 3 conditions in scope for this run
+          </span>
+        </div>
+        <div className="w-px bg-border" />
+        <div className="px-5 py-3 flex items-center gap-4">
+          {conditions.map((c) => {
+            const meta = CONDITION_META[c.conditionType];
+            return (
+              <div key={c.conditionType} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${c.isEnabled ? meta.activeDot : meta.inactiveDot}`} />
+                <span className={`text-xs ${c.isEnabled ? "text-primary" : "text-muted"}`}>{meta.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────── Root Component ─────────────────────── */
 
-export function ProductTabs({ config, brandShelfLife, skus, brands }: Props) {
+export function ProductTabs({ config, skus, brands, inventoryConditions }: Props) {
   const [activeTab, setActiveTab] = useState("global");
 
   return (
@@ -589,12 +707,9 @@ export function ProductTabs({ config, brandShelfLife, skus, brands }: Props) {
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
       <div className="mt-6">
         {activeTab === "global" && <GlobalRulesTab config={config} skus={skus} />}
-        {activeTab === "brands" && (
-          <BrandOverridesTab brands={brands} brandShelfLife={brandShelfLife} config={config} />
-        )}
-        {activeTab === "skus" && (
-          <SKUConfigTab skus={skus} brandShelfLife={brandShelfLife} config={config} />
-        )}
+        {activeTab === "brands" && <BrandOverridesTab brands={brands} config={config} />}
+        {activeTab === "skus" && <SKUConfigTab skus={skus} brands={brands} config={config} />}
+        {activeTab === "conditions" && <InventoryConditionsTab initialConditions={inventoryConditions} />}
       </div>
     </div>
   );
