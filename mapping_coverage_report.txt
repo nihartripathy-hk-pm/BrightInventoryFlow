@@ -1,0 +1,19 @@
+=== Sheets in LCC - Inventory Liquidation Data.xlsx not referenced by table_data_mapping ===
+  - AuditLog
+  - BrandShelfLife
+  - OrderLineItems
+  - PendingChanges
+  - TransferOrders
+
+=== inventory.* tables in DDL with no entry in table_data_mapping ===
+
+=== Tables listed in table_data_mapping with no sheet (NULL / empty sheet_reference) ===
+  - inventory.batch_runs
+
+=== Warnings ===
+  - inventory.skus: skipped 810 sheet row(s) with blank required key(s)
+  - inventory.batches: Excel sheet 'Batches' columns match `inventory.batch_runs`, not `inventory.batches`. Generated SQL maps master_sink_id -> master_id and wh_id for load only; fix data or mapping before production.
+  - No sheet for inventory.batch_runs (mapping sheet ref: None)
+
+=== Mapping typo note ===
+  - Mapping uses 'InventoryConditons'; resolved to sheet 'InventoryConditions'.
