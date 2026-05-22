@@ -92,6 +92,9 @@ export default async function WarehousePage() {
         overrides={overrides}
         pendingDonor={Object.fromEntries(pendingDonor)}
         pendingOverride={Object.fromEntries(pendingOverride)}
+        pendingDonorIds={new Set(pendingDonor.keys())}
+        pendingOverrideIds={new Set(pendingOverride.keys())}
+        pendingMasterSink={pendingSink !== undefined}
       />
     </div>
   );

@@ -10,6 +10,8 @@ import type {
 } from "@/lib/gsheets";
 import { TabBar } from "@/components/ui/TabBar";
 import { InlineEditNumber } from "@/components/ui/InlineEditNumber";
+import { PendingBadge } from "@/components/ui/PendingBadge";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import {
   saveGlobalThresholdAction,
   saveCategoryThresholdAction,
@@ -24,6 +26,9 @@ type Props = {
   brandThresholds: ThresholdsBrand[];
   allCategories: Category[];
   allBrands: Brand[];
+  pendingGlobalFields: Set<string>;
+  pendingCategoryIds: Set<string>;
+  pendingBrandIds: Set<string>;
 };
 
 // ─── Tab 1: Global Default ────────────────────────────────────────────────────
@@ -51,8 +56,10 @@ const TIER_ITEMS = [
 
 function GlobalTab({
   globalThresholds,
+  pendingGlobalFields,
 }: {
   globalThresholds: ThresholdsGlobal;
+  pendingGlobalFields: Set<string>;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -145,7 +152,7 @@ function GlobalTab({
               prefix="₹"
             />
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-1.5">
             {isConfigured(globalThresholds.cogsMin, globalThresholds.cogsMax) ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30">
                 Configured
@@ -155,6 +162,7 @@ function GlobalTab({
                 Not set
               </span>
             )}
+            {(pendingGlobalFields.has("cogsMin") || pendingGlobalFields.has("cogsMax")) && <PendingBadge />}
           </div>
         </div>
       </div>
@@ -197,7 +205,7 @@ function GlobalTab({
               suffix=" units"
             />
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-1.5">
             {isConfigured(globalThresholds.unitsMin, globalThresholds.unitsMax) ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30">
                 Configured
@@ -207,6 +215,7 @@ function GlobalTab({
                 Not set
               </span>
             )}
+            {(pendingGlobalFields.has("unitsMin") || pendingGlobalFields.has("unitsMax")) && <PendingBadge />}
           </div>
         </div>
       </div>
@@ -249,7 +258,7 @@ function GlobalTab({
               suffix=" kg"
             />
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-1.5">
             {isConfigured(
               globalThresholds.weightMin,
               globalThresholds.weightMax
@@ -262,6 +271,7 @@ function GlobalTab({
                 Not set
               </span>
             )}
+            {(pendingGlobalFields.has("weightMin") || pendingGlobalFields.has("weightMax")) && <PendingBadge />}
           </div>
         </div>
       </div>
@@ -277,65 +287,124 @@ function GlobalTab({
 
 // ─── Tab 2: Category Overrides ────────────────────────────────────────────────
 
+function hasAnyValue(t: ThresholdsCategory): boolean {
+  return (
+    t.cogsMin !== null || t.cogsMax !== null ||
+    t.unitsMin !== null || t.unitsMax !== null ||
+    t.weightMin !== null || t.weightMax !== null
+  );
+}
+
 function CategoryOverridesTab({
   allCategories,
   categoryThresholds,
+  pendingCategoryIds,
 }: {
   allCategories: Category[];
   categoryThresholds: ThresholdsCategory[];
+  pendingCategoryIds: Set<string>;
 }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [addCategoryId, setAddCategoryId] = useState("");
+  const [localIds, setLocalIds] = useState<string[]>([]);
+
+  // Show a category row if it has a committed override, a pending change, or was just added locally
+  const committedIds = new Set(categoryThresholds.filter(hasAnyValue).map((c) => c.categoryId));
+  const visibleIds = new Set([...committedIds, ...pendingCategoryIds, ...localIds]);
+  const visibleCategories = allCategories.filter((c) => visibleIds.has(c.id));
+  const addableCategories = allCategories
+    .filter((c) => !visibleIds.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  function handleAdd() {
+    if (!addCategoryId || visibleIds.has(addCategoryId)) return;
+    setLocalIds((prev) => [...prev, addCategoryId]);
+    setAddCategoryId("");
+    setShowAdd(false);
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-muted uppercase tracking-wider border-b border-border">
-            <th className="text-left pb-2 font-medium pr-4">Category</th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              COGS
-            </th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              Units
-            </th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              Weight
-            </th>
-            <th className="text-center pb-2 font-medium pr-4">Status</th>
-            <th className="text-center pb-2 font-medium">Clear</th>
-          </tr>
-          <tr className="text-xs text-muted-dark border-b border-border">
-            <th className="pb-2 pr-4"></th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 pr-4"></th>
-            <th className="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {allCategories.map((cat) => {
-            const override = categoryThresholds.find(
-              (c) => c.categoryId === cat.id
-            );
-            return (
-              <CategoryRow
-                key={cat.id}
-                category={cat}
-                override={override ?? null}
-              />
-            );
-          })}
-          {allCategories.length === 0 && (
-            <tr>
-              <td colSpan={9} className="text-center text-muted py-10">
-                No categories found.
-              </td>
+    <div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-xs text-muted">
+          {visibleCategories.length} categor{visibleCategories.length === 1 ? "y" : "ies"} with overrides
+        </span>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors"
+        >
+          {showAdd ? "Cancel" : "+ Add override"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">Category</p>
+            <SearchableSelect
+              options={addableCategories}
+              value={addCategoryId}
+              onChange={setAddCategoryId}
+              placeholder="Pick category…"
+              searchPlaceholder="Search category…"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={!addCategoryId}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add override
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-muted uppercase tracking-wider border-b border-border">
+              <th className="text-left pb-2 font-medium pr-4">Category</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>COGS</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>Units</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>Weight</th>
+              <th className="text-center pb-2 font-medium pr-4">Status</th>
+              <th className="text-center pb-2 font-medium">Clear</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+            <tr className="text-xs text-muted-dark border-b border-border">
+              <th className="pb-2 pr-4"></th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 pr-4"></th>
+              <th className="pb-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleCategories.map((cat) => {
+              const override = categoryThresholds.find((c) => c.categoryId === cat.id) ?? null;
+              return (
+                <CategoryRow
+                  key={cat.id}
+                  category={cat}
+                  override={override}
+                  hasPendingChange={pendingCategoryIds.has(cat.id)}
+                />
+              );
+            })}
+            {visibleCategories.length === 0 && (
+              <tr>
+                <td colSpan={9} className="text-center text-muted py-12 text-sm">
+                  No category overrides yet. Use + Add override to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -343,9 +412,11 @@ function CategoryOverridesTab({
 function CategoryRow({
   category,
   override,
+  hasPendingChange,
 }: {
   category: Category;
   override: ThresholdsCategory | null;
+  hasPendingChange: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -428,15 +499,18 @@ function CategoryRow({
       </td>
       {/* Status */}
       <td className="py-3 pr-4 text-center">
-        {hasOverride ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30 whitespace-nowrap">
-            Category Override
-          </span>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">
-            Using Global
-          </span>
-        )}
+        <div className="flex items-center justify-center gap-1.5">
+          {hasOverride ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30 whitespace-nowrap">
+              Category Override
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">
+              Using Global
+            </span>
+          )}
+          {hasPendingChange && <PendingBadge />}
+        </div>
       </td>
       {/* Clear */}
       <td className="py-3 text-center">
@@ -468,61 +542,123 @@ function CategoryRow({
 
 // ─── Tab 3: Brand Overrides ───────────────────────────────────────────────────
 
+function hasAnyBrandValue(t: ThresholdsBrand): boolean {
+  return (
+    t.cogsMin !== null || t.cogsMax !== null ||
+    t.unitsMin !== null || t.unitsMax !== null ||
+    t.weightMin !== null || t.weightMax !== null
+  );
+}
+
 function BrandOverridesTab({
   allBrands,
   brandThresholds,
+  pendingBrandIds,
 }: {
   allBrands: Brand[];
   brandThresholds: ThresholdsBrand[];
+  pendingBrandIds: Set<string>;
 }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [addBrandId, setAddBrandId] = useState("");
+  const [localIds, setLocalIds] = useState<string[]>([]);
+
+  const committedIds = new Set(brandThresholds.filter(hasAnyBrandValue).map((b) => b.brandId));
+  const visibleIds = new Set([...committedIds, ...pendingBrandIds, ...localIds]);
+  const visibleBrands = allBrands.filter((b) => visibleIds.has(b.id));
+  const addableBrands = allBrands
+    .filter((b) => !visibleIds.has(b.id))
+    .map((b) => ({ id: b.id, name: b.name }));
+
+  function handleAdd() {
+    if (!addBrandId || visibleIds.has(addBrandId)) return;
+    setLocalIds((prev) => [...prev, addBrandId]);
+    setAddBrandId("");
+    setShowAdd(false);
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-muted uppercase tracking-wider border-b border-border">
-            <th className="text-left pb-2 font-medium pr-4">Brand</th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              COGS
-            </th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              Units
-            </th>
-            <th className="text-center pb-2 font-medium pr-4" colSpan={2}>
-              Weight
-            </th>
-            <th className="text-center pb-2 font-medium pr-4">Status</th>
-            <th className="text-center pb-2 font-medium">Clear</th>
-          </tr>
-          <tr className="text-xs text-muted-dark border-b border-border">
-            <th className="pb-2 pr-4"></th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 font-normal text-center">Min</th>
-            <th className="pb-2 font-normal text-center pr-4">Max</th>
-            <th className="pb-2 pr-4"></th>
-            <th className="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {allBrands.map((brand) => {
-            const override = brandThresholds.find(
-              (b) => b.brandId === brand.id
-            );
-            return (
-              <BrandRow key={brand.id} brand={brand} override={override ?? null} />
-            );
-          })}
-          {allBrands.length === 0 && (
-            <tr>
-              <td colSpan={9} className="text-center text-muted py-10">
-                No brands found.
-              </td>
+    <div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-xs text-muted">
+          {visibleBrands.length} brand{visibleBrands.length === 1 ? "" : "s"} with overrides
+        </span>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors"
+        >
+          {showAdd ? "Cancel" : "+ Add override"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">Brand</p>
+            <SearchableSelect
+              options={addableBrands}
+              value={addBrandId}
+              onChange={setAddBrandId}
+              placeholder="Pick brand…"
+              searchPlaceholder="Search brand…"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={!addBrandId}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add override
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-muted uppercase tracking-wider border-b border-border">
+              <th className="text-left pb-2 font-medium pr-4">Brand</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>COGS</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>Units</th>
+              <th className="text-center pb-2 font-medium pr-4" colSpan={2}>Weight</th>
+              <th className="text-center pb-2 font-medium pr-4">Status</th>
+              <th className="text-center pb-2 font-medium">Clear</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+            <tr className="text-xs text-muted-dark border-b border-border">
+              <th className="pb-2 pr-4"></th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 font-normal text-center">Min</th>
+              <th className="pb-2 font-normal text-center pr-4">Max</th>
+              <th className="pb-2 pr-4"></th>
+              <th className="pb-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleBrands.map((brand) => {
+              const override = brandThresholds.find((b) => b.brandId === brand.id) ?? null;
+              return (
+                <BrandRow
+                  key={brand.id}
+                  brand={brand}
+                  override={override}
+                  hasPendingChange={pendingBrandIds.has(brand.id)}
+                />
+              );
+            })}
+            {visibleBrands.length === 0 && (
+              <tr>
+                <td colSpan={9} className="text-center text-muted py-12 text-sm">
+                  No brand overrides yet. Use + Add override to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -530,9 +666,11 @@ function BrandOverridesTab({
 function BrandRow({
   brand,
   override,
+  hasPendingChange,
 }: {
   brand: Brand;
   override: ThresholdsBrand | null;
+  hasPendingChange: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -618,15 +756,18 @@ function BrandRow({
       </td>
       {/* Status */}
       <td className="py-3 pr-4 text-center">
-        {hasOverride ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30 whitespace-nowrap">
-            Brand Override
-          </span>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">
-            Using Global
-          </span>
-        )}
+        <div className="flex items-center justify-center gap-1.5">
+          {hasOverride ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30 whitespace-nowrap">
+              Brand Override
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">
+              Using Global
+            </span>
+          )}
+          {hasPendingChange && <PendingBadge />}
+        </div>
       </td>
       {/* Clear */}
       <td className="py-3 text-center">
@@ -670,6 +811,9 @@ export function ThresholdsTabs({
   brandThresholds,
   allCategories,
   allBrands,
+  pendingGlobalFields,
+  pendingCategoryIds,
+  pendingBrandIds,
 }: Props) {
   const [activeTab, setActiveTab] = useState("global");
 
@@ -678,18 +822,23 @@ export function ThresholdsTabs({
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
       <div className="mt-6">
         {activeTab === "global" && (
-          <GlobalTab globalThresholds={globalThresholds} />
+          <GlobalTab
+            globalThresholds={globalThresholds}
+            pendingGlobalFields={pendingGlobalFields}
+          />
         )}
         {activeTab === "category" && (
           <CategoryOverridesTab
             allCategories={allCategories}
             categoryThresholds={categoryThresholds}
+            pendingCategoryIds={pendingCategoryIds}
           />
         )}
         {activeTab === "brand" && (
           <BrandOverridesTab
             allBrands={allBrands}
             brandThresholds={brandThresholds}
+            pendingBrandIds={pendingBrandIds}
           />
         )}
       </div>

@@ -193,9 +193,11 @@ SORTKEY (brand_id);
 
 CREATE TABLE inventory.product_config_global (
     id                      VARCHAR(50)   NOT NULL DEFAULT 'global',
-    standard_shelf_life_pct DECIMAL(5,2),
-    op_shelf_life_pct       DECIMAL(5,2),
-    standard_enabled        BOOLEAN,
+    standard_shelf_life_pct     DECIMAL(5,2),
+    op_shelf_life_pct           DECIMAL(5,2),
+    standard_shelf_life_min_pct DECIMAL(5,2),
+    op_shelf_life_min_pct       DECIMAL(5,2),
+    standard_enabled            BOOLEAN,
     op_enabled              BOOLEAN,
     is_active               BOOLEAN       DEFAULT TRUE,
     created_by              VARCHAR(100)  NOT NULL,

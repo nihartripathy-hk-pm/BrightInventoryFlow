@@ -107,6 +107,8 @@ export type ProductConfigGlobal = {
   id: string;
   standardShelfLifePct: number;
   opShelfLifePct: number;
+  standardShelfLifeMinPct: number | null;
+  opShelfLifeMinPct: number | null;
   standardEnabled: boolean;
   opEnabled: boolean;
   isActive: boolean;
@@ -264,7 +266,7 @@ const SHEET_HEADERS: Record<string, string[]> = {
   ThresholdsGlobal: ["id", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
   ThresholdsCategory: ["category_id", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
   ThresholdsBrand: ["brand_id", "brand_name", "category_id", "category_name", "cogs_min", "cogs_max", "units_min", "units_max", "weight_min", "weight_max", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
-  ProductConfigGlobal: ["id", "standard_shelf_life_pct", "op_shelf_life_pct", "standard_enabled", "op_enabled", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
+  ProductConfigGlobal: ["id", "standard_shelf_life_pct", "op_shelf_life_pct", "standard_shelf_life_min_pct", "op_shelf_life_min_pct", "standard_enabled", "op_enabled", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
   Brands: ["id", "name", "category_id", "shelf_life_override_pct", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
   SKUs: ["id", "name", "brand_id", "brand_name", "category_id", "category_name", "type", "shelf_life_override_pct", "is_ignored", "is_active", "stock_units", "created_by", "create_dt", "updated_by", "update_dt"],
   Categories: ["id", "name", "shelf_life_override_pct", "is_active", "created_by", "create_dt", "updated_by", "update_dt"],
@@ -669,8 +671,10 @@ export async function saveThresholdsBrand(rows: ThresholdsBrand[]): Promise<void
 }
 
 // ─── ProductConfigGlobal ──────────────────────────────────────────────────────
-// Columns: id(0) standard_shelf_life_pct(1) op_shelf_life_pct(2) standard_enabled(3)
-//          op_enabled(4) is_active(5) created_by(6) create_dt(7) updated_by(8) update_dt(9)
+// Columns: id(0) standard_shelf_life_pct(1) op_shelf_life_pct(2)
+//          standard_shelf_life_min_pct(3) op_shelf_life_min_pct(4)
+//          standard_enabled(5) op_enabled(6) is_active(7)
+//          created_by(8) create_dt(9) updated_by(10) update_dt(11)
 export async function getProductConfigGlobal(): Promise<ProductConfigGlobal> {
   const rows = await readSheet(SHEET_NAMES.ProductConfigGlobal);
   if (rows.length <= 1) {
@@ -678,6 +682,8 @@ export async function getProductConfigGlobal(): Promise<ProductConfigGlobal> {
       id: "global",
       standardShelfLifePct: 30,
       opShelfLifePct: 50,
+      standardShelfLifeMinPct: null,
+      opShelfLifeMinPct: null,
       standardEnabled: true,
       opEnabled: true,
       isActive: true,
@@ -689,13 +695,15 @@ export async function getProductConfigGlobal(): Promise<ProductConfigGlobal> {
     id: str(r[0]) || "global",
     standardShelfLifePct: num(r[1]) ?? 30,
     opShelfLifePct: num(r[2]) ?? 50,
-    standardEnabled: bool(r[3]),
-    opEnabled: bool(r[4]),
-    isActive: r[5] !== undefined ? bool(r[5]) : true,
-    createdBy: str(r[6]),
-    createDt: str(r[7]),
-    updatedBy: nullStr(r[8]),
-    updateDt: str(r[9]),
+    standardShelfLifeMinPct: num(r[3]),
+    opShelfLifeMinPct: num(r[4]),
+    standardEnabled: bool(r[5]),
+    opEnabled: bool(r[6]),
+    isActive: r[7] !== undefined ? bool(r[7]) : true,
+    createdBy: str(r[8]),
+    createDt: str(r[9]),
+    updatedBy: nullStr(r[10]),
+    updateDt: str(r[11]),
   };
 }
 
@@ -704,6 +712,8 @@ export async function saveProductConfigGlobal(config: ProductConfigGlobal): Prom
     config.id,
     config.standardShelfLifePct,
     config.opShelfLifePct,
+    config.standardShelfLifeMinPct ?? "",
+    config.opShelfLifeMinPct ?? "",
     String(config.standardEnabled),
     String(config.opEnabled),
     String(config.isActive),

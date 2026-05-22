@@ -6,6 +6,8 @@ import { Toggle } from "@/components/ui/Toggle";
 import { InlineEditNumber } from "@/components/ui/InlineEditNumber";
 import { TabBar } from "@/components/ui/TabBar";
 import { CsvUploadPanel } from "@/components/ui/CsvUploadPanel";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { PendingBadge } from "@/components/ui/PendingBadge";
 import {
   saveProductGlobalAction,
   saveBrandShelfLifeAction,
@@ -18,6 +20,10 @@ interface Props {
   skus: SKU[];
   brands: Brand[];
   inventoryConditions: InventoryCondition[];
+  pendingBrandIds: Set<string>;
+  pendingSkuIds: Set<string>;
+  pendingConditionIds: Set<string>;
+  pendingGlobalFields: Set<string>;
 }
 
 const TABS = [
@@ -32,13 +38,17 @@ const TABS = [
 function GlobalRulesTab({
   config,
   skus,
+  pendingGlobalFields,
 }: {
   config: ProductConfigGlobal;
   skus: SKU[];
+  pendingGlobalFields: Set<string>;
 }) {
   const [, startTransition] = useTransition();
   const [standardPct, setStandardPct] = useState(config.standardShelfLifePct);
   const [opPct, setOpPct] = useState(config.opShelfLifePct);
+  const [standardMinPct, setStandardMinPct] = useState<number | null>(config.standardShelfLifeMinPct);
+  const [opMinPct, setOpMinPct] = useState<number | null>(config.opShelfLifeMinPct);
   const [standardEnabled, setStandardEnabled] = useState(config.standardEnabled);
   const [opEnabled, setOpEnabled] = useState(config.opEnabled);
 
@@ -52,6 +62,15 @@ function GlobalRulesTab({
   ) {
     setter(value);
     startTransition(() => { saveProductGlobalAction(field, value); });
+  }
+
+  function handleMin(
+    field: "standardShelfLifeMinPct" | "opShelfLifeMinPct",
+    value: number | null,
+    setter: (v: number | null) => void
+  ) {
+    setter(value);
+    startTransition(() => { saveProductGlobalAction(field, value as number); });
   }
 
   function handleToggle(
@@ -133,32 +152,60 @@ function GlobalRulesTab({
 
         <div className="grid grid-cols-2 gap-6 mt-2">
           {/* Standard */}
-          <div>
-            <p className="text-xs text-muted mb-2">STANDARD SKUs — Days Before Expiry (%)</p>
-            <div className="flex items-center gap-3">
-              <input
-                type="range" min={10} max={100} step={5} value={standardPct}
-                onChange={(e) => handleSlider("standardShelfLifePct", Number(e.target.value), setStandardPct)}
-                className="flex-1 accent-accent"
+          <div className="bg-row/40 border border-border rounded-lg p-4 space-y-4">
+            <p className="text-xs font-medium text-muted uppercase tracking-wider">Standard SKUs</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted flex items-center gap-2">
+                Min
+                {pendingGlobalFields.has("standardShelfLifeMinPct") && <PendingBadge />}
+              </p>
+              <InlineEditNumber
+                value={standardMinPct}
+                suffix="%"
+                placeholder="—"
+                onSave={(v) => handleMin("standardShelfLifeMinPct", v, setStandardMinPct)}
               />
-              <span className="text-sm font-semibold bg-accent/10 text-accent border border-accent/30 px-3 py-1.5 rounded-md w-16 text-center">
-                {standardPct}%
-              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted flex items-center gap-2">
+                Max
+                {pendingGlobalFields.has("standardShelfLifePct") && <PendingBadge />}
+              </p>
+              <InlineEditNumber
+                value={standardPct}
+                suffix="%"
+                placeholder="—"
+                onSave={(v) => handleSlider("standardShelfLifePct", v ?? standardPct, setStandardPct)}
+              />
             </div>
           </div>
 
           {/* OP */}
-          <div>
-            <p className="text-xs text-muted mb-2">OP SKUs — Days Before Expiry (%)</p>
-            <div className="flex items-center gap-3">
-              <input
-                type="range" min={10} max={100} step={5} value={opPct}
-                onChange={(e) => handleSlider("opShelfLifePct", Number(e.target.value), setOpPct)}
-                className="flex-1 accent-amber-500"
+          <div className="bg-row/40 border border-border rounded-lg p-4 space-y-4">
+            <p className="text-xs font-medium text-muted uppercase tracking-wider">OP SKUs</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted flex items-center gap-2">
+                Min
+                {pendingGlobalFields.has("opShelfLifeMinPct") && <PendingBadge />}
+              </p>
+              <InlineEditNumber
+                value={opMinPct}
+                suffix="%"
+                placeholder="—"
+                onSave={(v) => handleMin("opShelfLifeMinPct", v, setOpMinPct)}
               />
-              <span className="text-sm font-semibold bg-amber-900/20 text-amber-400 border border-amber-800/40 px-3 py-1.5 rounded-md w-16 text-center">
-                {opPct}%
-              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted flex items-center gap-2">
+                Max
+                {pendingGlobalFields.has("opShelfLifePct") && <PendingBadge />}
+              </p>
+              <InlineEditNumber
+                value={opPct}
+                suffix="%"
+                placeholder="—"
+                onSave={(v) => handleSlider("opShelfLifePct", v ?? opPct, setOpPct)}
+              />
             </div>
           </div>
         </div>
@@ -192,6 +239,7 @@ function GlobalRulesTab({
               </svg>
             </button>
             <div className="flex items-center gap-2">
+              {pendingGlobalFields.has("standardEnabled") && <PendingBadge />}
               <span className={`text-xs font-medium ${standardEnabled ? "text-green-400" : "text-muted"}`}>
                 {standardEnabled ? "Enabled" : "Disabled"}
               </span>
@@ -222,6 +270,7 @@ function GlobalRulesTab({
               </svg>
             </button>
             <div className="flex items-center gap-2">
+              {pendingGlobalFields.has("opEnabled") && <PendingBadge />}
               <span className={`text-xs font-medium ${opEnabled ? "text-green-400" : "text-muted"}`}>
                 {opEnabled ? "Enabled" : "Disabled"}
               </span>
@@ -242,18 +291,28 @@ function GlobalRulesTab({
 function BrandOverridesTab({
   brands,
   config,
+  pendingBrandIds,
 }: {
   brands: Brand[];
   config: ProductConfigGlobal;
+  pendingBrandIds: Set<string>;
 }) {
   const [, startTransition] = useTransition();
+  const [addBrandId, setAddBrandId] = useState<string>("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  // Show a brand if it's active OR if it has a pending change (so a disable-in-flight stays visible with a Pending badge)
+  const activeBrands = brands.filter((b) => b.isActive || pendingBrandIds.has(b.id));
+  const inactiveBrandOptions = brands
+    .filter((b) => !b.isActive && !pendingBrandIds.has(b.id))
+    .map((b) => ({ id: b.id, name: b.name }));
 
   function handleShelfLife(brand: Brand, value: number | null) {
     startTransition(() => {
       saveBrandShelfLifeAction(
         brand.id, brand.name, brand.categoryId,
         value,
-        value !== null
+        true
       );
     });
   }
@@ -268,69 +327,139 @@ function BrandOverridesTab({
     });
   }
 
+  function handleAdd() {
+    if (!addBrandId) return;
+    const brand = brands.find((b) => b.id === addBrandId);
+    if (!brand) return;
+    setAddBrandId("");
+    setShowAdd(false);
+    startTransition(() => {
+      saveBrandShelfLifeAction(
+        brand.id, brand.name, brand.categoryId,
+        brand.shelfLifeOverridePct ?? config.standardShelfLifePct,
+        true
+      );
+    });
+  }
+
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-row">
-            {["Brand", "Category", "Shelf Life Override", "Status"].map((col) => (
-              <th key={col} className="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {brands.map((brand) => (
-            <tr key={brand.id} className="border-b border-border hover:bg-row/50 transition-colors">
-              {/* Brand */}
-              <td className="px-4 py-3">
-                <p className="font-medium text-primary">{brand.name}</p>
-                <p className="text-xs text-muted font-mono">{brand.id}</p>
-              </td>
+    <div>
+      {/* CSV Upload */}
+      <CsvUploadPanel
+        title="Brand Overrides Bulk Upload"
+        columns={["brand_id", "shelf_life_pct", "active"]}
+        onUpload={async (rows) => {
+          for (const row of rows) {
+            const id = row["brand_id"];
+            if (!id) continue;
+            const brand = brands.find((b) => b.id === id);
+            if (!brand) continue;
+            const rawPct = row["shelf_life_pct"]?.trim();
+            const pct = rawPct && rawPct !== "" ? parseFloat(rawPct) : null;
+            const rawActive = (row["active"] ?? "").toLowerCase().trim();
+            const active = rawActive === "true" || rawActive === "1" || rawActive === "yes";
+            await saveBrandShelfLifeAction(
+              brand.id, brand.name, brand.categoryId,
+              pct !== null && !isNaN(pct) ? pct : null,
+              active
+            );
+          }
+        }}
+      />
 
-              {/* Category */}
-              <td className="px-4 py-3 text-sm text-muted font-mono">{brand.categoryId}</td>
+      {/* Add button row */}
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <span className="text-xs text-muted-dark whitespace-nowrap">
+          {activeBrands.length} brand override{activeBrands.length === 1 ? "" : "s"}
+        </span>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors"
+        >
+          {showAdd ? "Cancel" : "+ Add override"}
+        </button>
+      </div>
 
-              {/* Shelf Life Override (inline edit) */}
-              <td className="px-4 py-3">
-                <InlineEditNumber
-                  value={brand.shelfLifeOverridePct}
-                  placeholder={`Global (${config.standardShelfLifePct}%)`}
-                  suffix="%"
-                  onSave={(value) => handleShelfLife(brand, value)}
-                />
-              </td>
+      {showAdd && (
+        <div className="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">Brand</p>
+            <SearchableSelect
+              options={inactiveBrandOptions}
+              value={addBrandId}
+              onChange={setAddBrandId}
+              placeholder="Pick brand…"
+              searchPlaceholder="Search brand…"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={!addBrandId}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add override
+          </button>
+        </div>
+      )}
 
-              {/* Status toggle */}
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Toggle
-                    checked={brand.isActive}
-                    onChange={(val) => handleToggle(brand, val)}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-row">
+              {["Brand", "Category", "Shelf Life Override", "Status"].map((col) => (
+                <th key={col} className="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {activeBrands.map((brand) => (
+              <tr key={brand.id} className="border-b border-border hover:bg-row/50 transition-colors">
+                {/* Brand */}
+                <td className="px-4 py-3">
+                  <p className="font-medium text-primary">{brand.name}</p>
+                  <p className="text-xs text-muted font-mono">{brand.id}</p>
+                </td>
+
+                {/* Category */}
+                <td className="px-4 py-3 text-sm text-muted font-mono">{brand.categoryId}</td>
+
+                {/* Shelf Life Override (inline edit) */}
+                <td className="px-4 py-3">
+                  <InlineEditNumber
+                    value={brand.shelfLifeOverridePct}
+                    placeholder={`Global (${config.standardShelfLifePct}%)`}
+                    suffix="%"
+                    onSave={(value) => handleShelfLife(brand, value)}
                   />
-                  {brand.isActive ? (
+                </td>
+
+                {/* Status toggle */}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Toggle
+                      checked={brand.isActive}
+                      onChange={(val) => handleToggle(brand, val)}
+                    />
                     <span className="text-xs bg-teal-900/30 text-teal-400 border border-teal-800/30 px-2 py-0.5 rounded-full">
                       Brand Override
                     </span>
-                  ) : (
-                    <span className="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">
-                      Using Global
-                    </span>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-          {brands.length === 0 && (
-            <tr>
-              <td colSpan={4} className="px-4 py-12 text-center text-muted text-sm">
-                No brands found.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+                    {pendingBrandIds.has(brand.id) && <PendingBadge />}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {activeBrands.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-12 text-center text-muted text-sm">
+                  No brand overrides yet. Use + Add override or the bulk CSV upload to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -344,17 +473,30 @@ function SKUConfigTab({
   skus,
   brands,
   config,
+  pendingSkuIds,
 }: {
   skus: SKU[];
   brands: Brand[];
   config: ProductConfigGlobal;
+  pendingSkuIds: Set<string>;
 }) {
   const [, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [eligibilityFilter, setEligibilityFilter] = useState<EligibilityFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [addSkuId, setAddSkuId] = useState<string>("");
+  const [showAdd, setShowAdd] = useState(false);
 
-  const filtered = skus.filter((s) => {
+  function sourceOf(sku: SKU): "sku" | "brand" | "global" {
+    if (sku.shelfLifeOverridePct !== null) return "sku";
+    const brandOverride = brands.find((b) => b.id === sku.brandId);
+    if (brandOverride?.isActive) return "brand";
+    return "global";
+  }
+
+  const skusWithOverride = skus.filter((s) => sourceOf(s) === "sku");
+
+  const filtered = skusWithOverride.filter((s) => {
     if (
       searchQuery &&
       !s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -369,6 +511,21 @@ function SKUConfigTab({
     if (typeFilter === "op" && s.type !== "op") return false;
     return true;
   });
+
+  const globalSkuOptions = skus
+    .filter((s) => sourceOf(s) !== "sku")
+    .map((s) => ({ id: s.id, name: s.name }));
+
+  function handleAddSkuOverride() {
+    if (!addSkuId) return;
+    const sku = skus.find((s) => s.id === addSkuId);
+    if (!sku) return;
+    setAddSkuId("");
+    setShowAdd(false);
+    startTransition(() => {
+      saveSKUConfigAction(sku.id, config.standardShelfLifePct, sku.isIgnored);
+    });
+  }
 
   function handleSKUShelfLife(sku: SKU, value: number | null) {
     startTransition(() => { saveSKUConfigAction(sku.id, value, sku.isIgnored); });
@@ -447,10 +604,39 @@ function SKUConfigTab({
           ))}
         </div>
 
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors whitespace-nowrap"
+        >
+          {showAdd ? "Cancel" : "+ Add override"}
+        </button>
+
         <span className="text-xs text-muted-dark whitespace-nowrap">
-          {filtered.length} / {skus.length} SKUs
+          {filtered.length} / {skusWithOverride.length} overridden SKUs
         </span>
       </div>
+
+      {showAdd && (
+        <div className="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">SKU</p>
+            <SearchableSelect
+              options={globalSkuOptions}
+              value={addSkuId}
+              onChange={setAddSkuId}
+              placeholder="Pick SKU…"
+              searchPlaceholder="Search SKU…"
+            />
+          </div>
+          <button
+            onClick={handleAddSkuOverride}
+            disabled={!addSkuId}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add override
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -467,12 +653,7 @@ function SKUConfigTab({
           <tbody>
             {filtered.map((sku) => {
               const brandOverride = brands.find((b) => b.id === sku.brandId);
-              const source =
-                sku.shelfLifeOverridePct !== null
-                  ? "sku"
-                  : brandOverride?.isActive
-                  ? "brand"
-                  : "global";
+              const source = sourceOf(sku);
 
               return (
                 <tr key={sku.id} className="border-b border-border hover:bg-row/50 transition-colors">
@@ -517,19 +698,12 @@ function SKUConfigTab({
 
                   {/* Source badge */}
                   <td className="px-4 py-3">
-                    {source === "sku" ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs bg-violet-900/30 text-violet-400 border border-violet-800/30 px-2 py-0.5 rounded-full">
                         SKU Override
                       </span>
-                    ) : source === "brand" ? (
-                      <span className="text-xs bg-blue-900/30 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">
-                        Brand ({brandOverride?.name})
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">
-                        Global Default
-                      </span>
-                    )}
+                      {pendingSkuIds.has(sku.id) && <PendingBadge />}
+                    </div>
                   </td>
 
                   {/* Stock */}
@@ -556,7 +730,9 @@ function SKUConfigTab({
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-muted text-sm">
-                  No SKUs match the current filters.
+                  {skusWithOverride.length === 0
+                    ? "No SKU overrides yet. Use + Add override or the bulk CSV upload above."
+                    : "No SKUs match the current filters."}
                 </td>
               </tr>
             )}
@@ -608,7 +784,13 @@ const CONDITION_META = {
   },
 } as const;
 
-function InventoryConditionsTab({ initialConditions }: { initialConditions: InventoryCondition[] }) {
+function InventoryConditionsTab({
+  initialConditions,
+  pendingConditionIds,
+}: {
+  initialConditions: InventoryCondition[];
+  pendingConditionIds: Set<string>;
+}) {
   const [, startTransition] = useTransition();
   const [conditions, setConditions] = useState(initialConditions);
 
@@ -663,6 +845,7 @@ function InventoryConditionsTab({ initialConditions }: { initialConditions: Inve
 
               {/* Toggle */}
               <div className="flex items-center gap-2 shrink-0">
+                {pendingConditionIds.has(c.conditionType) && <PendingBadge />}
                 <span className={`text-xs font-medium ${c.isEnabled ? "text-green-400" : "text-muted"}`}>
                   {c.isEnabled ? "Enabled" : "Disabled"}
                 </span>
@@ -699,17 +882,37 @@ function InventoryConditionsTab({ initialConditions }: { initialConditions: Inve
 
 /* ─────────────────────── Root Component ─────────────────────── */
 
-export function ProductTabs({ config, skus, brands, inventoryConditions }: Props) {
+export function ProductTabs({
+  config,
+  skus,
+  brands,
+  inventoryConditions,
+  pendingBrandIds,
+  pendingSkuIds,
+  pendingConditionIds,
+  pendingGlobalFields,
+}: Props) {
   const [activeTab, setActiveTab] = useState("global");
 
   return (
     <div>
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
       <div className="mt-6">
-        {activeTab === "global" && <GlobalRulesTab config={config} skus={skus} />}
-        {activeTab === "brands" && <BrandOverridesTab brands={brands} config={config} />}
-        {activeTab === "skus" && <SKUConfigTab skus={skus} brands={brands} config={config} />}
-        {activeTab === "conditions" && <InventoryConditionsTab initialConditions={inventoryConditions} />}
+        {activeTab === "global" && (
+          <GlobalRulesTab config={config} skus={skus} pendingGlobalFields={pendingGlobalFields} />
+        )}
+        {activeTab === "brands" && (
+          <BrandOverridesTab brands={brands} config={config} pendingBrandIds={pendingBrandIds} />
+        )}
+        {activeTab === "skus" && (
+          <SKUConfigTab skus={skus} brands={brands} config={config} pendingSkuIds={pendingSkuIds} />
+        )}
+        {activeTab === "conditions" && (
+          <InventoryConditionsTab
+            initialConditions={inventoryConditions}
+            pendingConditionIds={pendingConditionIds}
+          />
+        )}
       </div>
     </div>
   );

@@ -143,6 +143,8 @@ async function main() {
     id: "global",
     standardShelfLifePct: 30,
     opShelfLifePct: 50,
+    standardShelfLifeMinPct: null,
+    opShelfLifeMinPct: null,
     standardEnabled: true,
     opEnabled: true,
     isActive: true,

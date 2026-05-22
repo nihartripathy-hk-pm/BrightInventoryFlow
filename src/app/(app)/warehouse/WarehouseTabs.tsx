@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition } from "react";
 import type { Warehouse, DonorSetting, RoutePairOverride } from "@/lib/gsheets";
 import { TabBar } from "@/components/ui/TabBar";
 import { Toggle } from "@/components/ui/Toggle";
 import { CsvUploadPanel } from "@/components/ui/CsvUploadPanel";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { PendingBadge } from "@/components/ui/PendingBadge";
 import {
   setMasterSinkAction,
   toggleDonorAction,
@@ -19,6 +21,9 @@ type Props = {
   overrides: RoutePairOverride[];
   pendingDonor: Record<string, boolean>;
   pendingOverride: Record<string, string | null>;
+  pendingDonorIds: Set<string>;
+  pendingOverrideIds: Set<string>;
+  pendingMasterSink: boolean;
 };
 
 // ─── Tab 1: Warehouse Network ─────────────────────────────────────────────────
@@ -106,9 +111,11 @@ function WarehouseCard({
 function NetworkTab({
   warehouses,
   effectiveSinkId,
+  pendingMasterSink,
 }: {
   warehouses: Warehouse[];
   effectiveSinkId: string | null;
+  pendingMasterSink: boolean;
 }) {
   const [query, setQuery] = useState("");
 
@@ -126,12 +133,15 @@ function NetworkTab({
 
   return (
     <div>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search warehouses to change master sink…"
-        className="mb-4 w-full max-w-sm bg-row border border-border rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors"
-      />
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search warehouses to change master sink…"
+          className="flex-1 max-w-sm bg-row border border-border rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors"
+        />
+        {pendingMasterSink && <PendingBadge />}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((w) => (
           <WarehouseCard key={w.id} w={w} effectiveSinkId={effectiveSinkId} />
@@ -160,11 +170,13 @@ function DonorNetworkTab({
   effectiveSinkId,
   donorSettings,
   pendingDonor,
+  pendingDonorIds,
 }: {
   warehouses: Warehouse[];
   effectiveSinkId: string | null;
   donorSettings: DonorSetting[];
   pendingDonor: Record<string, boolean>;
+  pendingDonorIds: Set<string>;
 }) {
   const [activeFilter, setActiveFilter] = useState<DonorFilter>("all");
   const [query, setQuery] = useState("");
@@ -277,6 +289,7 @@ function DonorNetworkTab({
                 w={w}
                 isSink={w.id === effectiveSinkId}
                 isParticipating={effectiveParticipating(w.id)}
+                hasPendingChange={pendingDonorIds.has(w.id)}
               />
             ))}
             {filtered.length === 0 && (
@@ -297,10 +310,12 @@ function DonorRow({
   w,
   isSink,
   isParticipating,
+  hasPendingChange,
 }: {
   w: Warehouse;
   isSink: boolean;
   isParticipating: boolean;
+  hasPendingChange: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -322,19 +337,22 @@ function DonorRow({
         {w.stockUnits.toLocaleString()}
       </td>
       <td className="py-3 pr-4 text-center">
-        {isSink ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
-            Master Sink
-          </span>
-        ) : isParticipating ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/20 text-green-400 border border-green-800/30">
-            Participating
-          </span>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-red-900/20 text-red-400 border border-red-800/30">
-            Bypassed
-          </span>
-        )}
+        <div className="flex items-center justify-center gap-1.5">
+          {isSink ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+              Master Sink
+            </span>
+          ) : isParticipating ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/20 text-green-400 border border-green-800/30">
+              Participating
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-red-900/20 text-red-400 border border-red-800/30">
+              Bypassed
+            </span>
+          )}
+          {hasPendingChange && <PendingBadge />}
+        </div>
       </td>
       <td className="py-3 text-center">
         <Toggle
@@ -353,22 +371,25 @@ function DonorRow({
 
 // ─── Tab 3: Route Pair Overrides ──────────────────────────────────────────────
 
-type OverrideFilter = "all" | "global" | "override";
-
 function RoutePairTab({
   warehouses,
   effectiveSinkId,
   overrides,
   pendingOverride,
+  pendingOverrideIds,
 }: {
   warehouses: Warehouse[];
   effectiveSinkId: string | null;
   overrides: RoutePairOverride[];
   pendingOverride: Record<string, string | null>;
+  pendingOverrideIds: Set<string>;
 }) {
-  const [activeFilter, setActiveFilter] = useState<OverrideFilter>("all");
   const [sourceQuery, setSourceQuery] = useState("");
   const [destQuery, setDestQuery] = useState("");
+  const [, startTransition] = useTransition();
+  const [addDonorId, setAddDonorId] = useState<string>("");
+  const [addSinkId, setAddSinkId] = useState<string>("");
+  const [showAdd, setShowAdd] = useState(false);
 
   const masterSinkName =
     warehouses.find((w) => w.id === effectiveSinkId)?.name ?? "master sink";
@@ -384,7 +405,11 @@ function RoutePairTab({
     return existing ? existing.sinkWarehouseId : null;
   }
 
-  const filtered = donors.filter((w) => {
+  const donorsWithOverride = donors.filter(
+    (w) => effectiveOverrideSinkId(w.id) !== null
+  );
+
+  const filtered = donorsWithOverride.filter((w) => {
     if (sourceQuery) {
       const q = sourceQuery.toLowerCase();
       if (!w.name.toLowerCase().includes(q) && !w.id.toLowerCase().includes(q) && !w.city.toLowerCase().includes(q))
@@ -398,16 +423,27 @@ function RoutePairTab({
         : masterSinkName;
       if (!destName.toLowerCase().includes(q)) return false;
     }
-    if (activeFilter === "all") return true;
-    const hasOverride = effectiveOverrideSinkId(w.id) !== null;
-    return activeFilter === "override" ? hasOverride : !hasOverride;
+    return true;
   });
 
-  const filterLabels: { key: OverrideFilter; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "global", label: "Global" },
-    { key: "override", label: "Override" },
-  ];
+  const donorPickerOptions = donors
+    .filter((w) => effectiveOverrideSinkId(w.id) === null)
+    .map((w) => ({ id: w.id, name: w.name }));
+  const sinkPickerOptions = warehouses
+    .filter((w) => w.id !== addDonorId)
+    .map((w) => ({ id: w.id, name: w.name }));
+
+  function handleAdd() {
+    if (!addDonorId || !addSinkId) return;
+    const donorId = addDonorId;
+    const sinkId = addSinkId;
+    setAddDonorId("");
+    setAddSinkId("");
+    setShowAdd(false);
+    startTransition(async () => {
+      await setPairOverrideAction(donorId, sinkId);
+    });
+  }
 
   return (
     <div>
@@ -418,12 +454,10 @@ function RoutePairTab({
           <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" />
         </svg>
         <p className="text-xs text-muted leading-relaxed">
-          By default all donors route to the{" "}
-          <strong className="text-primary">{masterSinkName}</strong>. A Route Pair
-          Override redirects a specific donor to a custom sink, bypassing the global
-          default. The system badges each route as{" "}
-          <span className="text-muted font-medium">Global</span> or{" "}
-          <span className="text-violet-400 font-medium">Override</span>.
+          This list shows only donor warehouses with an active Route Pair Override.
+          All other donors route to the <strong className="text-primary">{masterSinkName}</strong> by
+          default. Use <span className="text-accent font-medium">+ Add override</span> or
+          the CSV upload to create new overrides.
         </p>
       </div>
 
@@ -471,25 +505,51 @@ function RoutePairTab({
             className="w-full bg-row border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors"
           />
         </div>
-        <div className="flex items-center rounded-lg border border-border overflow-hidden">
-          {filterLabels.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setActiveFilter(f.key)}
-              className={`px-3 py-2 text-xs font-medium transition-colors ${
-                activeFilter === f.key
-                  ? "bg-accent/10 text-accent"
-                  : "text-muted hover:text-primary"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors whitespace-nowrap"
+        >
+          {showAdd ? "Cancel" : "+ Add override"}
+        </button>
         <span className="text-xs text-muted-dark whitespace-nowrap">
-          {filtered.length} / {donors.length}
+          {filtered.length} override{filtered.length === 1 ? "" : "s"}
         </span>
       </div>
+
+      {showAdd && (
+        <div className="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">Donor</p>
+            <SearchableSelect
+              options={donorPickerOptions}
+              value={addDonorId}
+              onChange={setAddDonorId}
+              placeholder="Pick donor…"
+              searchPlaceholder="Search donor…"
+            />
+          </div>
+          <svg className="w-4 h-4 text-muted mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted mb-1">Sink</p>
+            <SearchableSelect
+              options={sinkPickerOptions}
+              value={addSinkId}
+              onChange={setAddSinkId}
+              placeholder="Pick sink…"
+              searchPlaceholder="Search sink…"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={!addDonorId || !addSinkId}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add override
+          </button>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -498,7 +558,6 @@ function RoutePairTab({
               <th className="text-left pb-2 font-medium">Source (Donor)</th>
               <th className="text-center pb-2 font-medium w-6"></th>
               <th className="text-left pb-2 font-medium">Destination (Sink)</th>
-              <th className="text-center pb-2 font-medium">Route Type</th>
               <th className="text-center pb-2 font-medium">Override</th>
             </tr>
           </thead>
@@ -510,12 +569,15 @@ function RoutePairTab({
                 effectiveSinkId={effectiveSinkId}
                 overrideSinkId={effectiveOverrideSinkId(w.id)}
                 allWarehouses={warehouses}
+                hasPendingChange={pendingOverrideIds.has(w.id)}
               />
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center text-muted py-10 text-sm">
-                  No routes match this filter.
+                <td colSpan={4} className="text-center text-muted py-10 text-sm">
+                  {donorsWithOverride.length === 0
+                    ? "No route pair overrides yet. Use + Add override or the CSV upload above."
+                    : "No overrides match the current search."}
                 </td>
               </tr>
             )}
@@ -526,110 +588,26 @@ function RoutePairTab({
   );
 }
 
-function SearchableSelect({
-  options,
-  value,
-  onChange,
-}: {
-  options: { id: string; name: string }[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filtered = query
-    ? options.filter((o) =>
-        `${o.name} ${o.id}`.toLowerCase().includes(query.toLowerCase())
-      )
-    : options;
-
-  const selected = options.find((o) => o.id === value);
-
-  return (
-    <div ref={ref} className="relative inline-block min-w-[220px]">
-      <button
-        type="button"
-        onClick={() => { setOpen((v) => !v); setQuery(""); }}
-        className="w-full flex items-center justify-between gap-2 bg-row border border-border rounded-md px-2 py-1.5 text-sm text-primary focus:outline-none focus:border-accent transition-colors"
-      >
-        <span className="truncate">{selected ? `${selected.name} (${selected.id})` : "—"}</span>
-        <svg className="w-3.5 h-3.5 flex-shrink-0 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[260px] bg-card border border-border rounded-md shadow-lg">
-          <div className="p-1.5 border-b border-border">
-            <input
-              autoFocus
-              type="text"
-              placeholder="Search warehouse…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-row border border-border rounded px-2 py-1 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent"
-            />
-          </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-muted">No results</li>
-            ) : (
-              filtered.map((o) => (
-                <li
-                  key={o.id}
-                  onClick={() => { onChange(o.id); setOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer transition-colors ${
-                    o.id === value
-                      ? "bg-accent/10 text-accent"
-                      : "text-primary hover:bg-row"
-                  }`}
-                >
-                  {o.id === value && (
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  <span className={o.id === value ? "" : "pl-5"}>{o.name} ({o.id})</span>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function OverrideRow({
   donor,
   effectiveSinkId,
   overrideSinkId,
   allWarehouses,
+  hasPendingChange,
 }: {
   donor: Warehouse;
   effectiveSinkId: string | null;
   overrideSinkId: string | null;
   allWarehouses: Warehouse[];
+  hasPendingChange: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
-  const hasOverride = overrideSinkId !== null;
+  const [editing, setEditing] = useState(false);
 
   const sinkOptions = allWarehouses.filter((w) => w.id !== donor.id);
   const overrideSinkName = overrideSinkId
     ? allWarehouses.find((w) => w.id === overrideSinkId)?.name ?? overrideSinkId
     : null;
-  const masterSinkName = effectiveSinkId
-    ? allWarehouses.find((w) => w.id === effectiveSinkId)?.name ?? effectiveSinkId
-    : "Master Sink";
 
   return (
     <tr
@@ -647,66 +625,60 @@ function OverrideRow({
 
       {/* Arrow */}
       <td className="py-3 text-center">
-        <svg
-          className={`w-4 h-4 inline ${hasOverride ? "text-violet-400" : "text-muted-dark"}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
+        <svg className="w-4 h-4 inline text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </td>
 
       {/* Destination */}
       <td className="py-3 pr-4">
-        {hasOverride ? (
-          <SearchableSelect
-            options={sinkOptions}
-            value={overrideSinkId ?? ""}
-            onChange={(sinkId) => {
-              startTransition(async () => {
-                await setPairOverrideAction(donor.id, sinkId);
-              });
-            }}
-          />
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <SearchableSelect
+              options={sinkOptions}
+              value={overrideSinkId ?? ""}
+              onChange={(sinkId) => {
+                setEditing(false);
+                startTransition(async () => {
+                  await setPairOverrideAction(donor.id, sinkId);
+                });
+              }}
+            />
+            <button
+              onClick={() => setEditing(false)}
+              className="text-xs text-muted hover:text-primary px-1"
+            >
+              ✕
+            </button>
+          </div>
         ) : (
-          <div>
-            <div className="text-sm text-muted">{masterSinkName}</div>
-            <div className="text-xs text-muted-dark font-mono">{effectiveSinkId}</div>
+          <div className="flex items-center gap-2 group">
+            <div>
+              <div className="text-sm text-primary">{overrideSinkName}</div>
+              <div className="text-xs text-muted font-mono">{overrideSinkId}</div>
+            </div>
+            <button
+              onClick={() => setEditing(true)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-accent"
+              title="Change destination"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828A2 2 0 0110 16.414H8v-2a2 2 0 01.586-1.414z" />
+              </svg>
+            </button>
+            {hasPendingChange && <PendingBadge />}
           </div>
         )}
       </td>
 
-      {/* Route Type badge */}
-      <td className="py-3 pr-4 text-center">
-        {hasOverride ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/20 text-violet-400 border border-violet-800/30">
-            Override
-          </span>
-        ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border">
-            Global
-          </span>
-        )}
-      </td>
-
-      {/* Override toggle */}
+      {/* Override toggle — toggling off removes the row */}
       <td className="py-3 text-center">
         <Toggle
-          checked={hasOverride}
-          onChange={(val) => {
-            if (!val) {
-              startTransition(async () => {
-                await clearPairOverrideAction(donor.id);
-              });
-            } else {
-              const defaultSink = sinkOptions[0];
-              if (defaultSink) {
-                startTransition(async () => {
-                  await setPairOverrideAction(donor.id, defaultSink.id);
-                });
-              }
-            }
+          checked={true}
+          onChange={() => {
+            startTransition(async () => {
+              await clearPairOverrideAction(donor.id);
+            });
           }}
         />
       </td>
@@ -729,6 +701,9 @@ export function WarehouseTabs({
   overrides,
   pendingDonor,
   pendingOverride,
+  pendingDonorIds,
+  pendingOverrideIds,
+  pendingMasterSink,
 }: Props) {
   const [activeTab, setActiveTab] = useState("network");
 
@@ -737,7 +712,11 @@ export function WarehouseTabs({
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
       <div className="mt-6">
         {activeTab === "network" && (
-          <NetworkTab warehouses={warehouses} effectiveSinkId={effectiveSinkId} />
+          <NetworkTab
+            warehouses={warehouses}
+            effectiveSinkId={effectiveSinkId}
+            pendingMasterSink={pendingMasterSink}
+          />
         )}
         {activeTab === "donor" && (
           <DonorNetworkTab
@@ -745,6 +724,7 @@ export function WarehouseTabs({
             effectiveSinkId={effectiveSinkId}
             donorSettings={donorSettings}
             pendingDonor={pendingDonor}
+            pendingDonorIds={pendingDonorIds}
           />
         )}
         {activeTab === "routes" && (
@@ -753,6 +733,7 @@ export function WarehouseTabs({
             effectiveSinkId={effectiveSinkId}
             overrides={overrides}
             pendingOverride={pendingOverride}
+            pendingOverrideIds={pendingOverrideIds}
           />
         )}
       </div>
