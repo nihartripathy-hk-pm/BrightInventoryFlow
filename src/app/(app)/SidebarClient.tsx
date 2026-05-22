@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTheme } from "@/components/ThemeProvider";
+import type { PendingChangeSummary } from "@/server/actions/draft";
 
 const NAV = [
   {
@@ -124,19 +126,8 @@ export function SidebarClient({ pendingCount, lastSaved, isCollapsed, onToggle }
 
       {/* Bottom */}
       <div className={`border-t border-border flex flex-col gap-2 flex-shrink-0 ${isCollapsed ? "p-2" : "p-3"}`}>
-        {pendingCount > 0 && !isCollapsed && (
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-amber-900/30 border border-amber-700/30">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-            <span className="text-xs text-amber-300 font-medium">Draft Mode</span>
-            <span className="ml-auto text-xs bg-amber-700/50 text-amber-200 px-1.5 py-0.5 rounded-full">
-              {pendingCount}
-            </span>
-          </div>
-        )}
-        {pendingCount > 0 && isCollapsed && (
-          <div className="flex justify-center">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          </div>
+        {pendingCount > 0 && (
+          <DraftModeBadge pendingCount={pendingCount} isCollapsed={isCollapsed} />
         )}
 
         <CommitButton pendingCount={pendingCount} isCollapsed={isCollapsed} />
@@ -155,6 +146,121 @@ export function SidebarClient({ pendingCount, lastSaved, isCollapsed, onToggle }
         </div>
       </div>
     </aside>
+  );
+}
+
+const MODULE_LABELS: Record<string, string> = {
+  warehouse_setup: "Warehouse",
+  transfer_thresholds: "Thresholds",
+  product_config: "Product",
+  approval: "Approval",
+  draft: "Draft",
+};
+
+function DraftModeModal({ onClose }: { onClose: () => void }) {
+  const [changes, setChanges] = useState<PendingChangeSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    import("@/server/actions/draft").then(({ listPendingChangesAction }) =>
+      listPendingChangesAction()
+        .then(setChanges)
+        .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"))
+    );
+  }, []);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/60 z-[200] flex items-start justify-center pt-20 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border rounded-xl w-full max-w-md shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <h3 className="text-sm font-semibold text-primary">Staged Changes</h3>
+            {changes && (
+              <span className="text-xs bg-amber-700/50 text-amber-200 px-1.5 py-0.5 rounded-full">
+                {changes.length}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted hover:text-primary transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="max-h-80 overflow-y-auto divide-y divide-border">
+          {error ? (
+            <p className="px-5 py-4 text-sm text-red-400">{error}</p>
+          ) : changes === null ? (
+            /* Loading skeletons */
+            [0, 1, 2].map((i) => (
+              <div key={i} className="px-5 py-3 flex items-center gap-3 animate-pulse">
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 bg-row rounded w-3/4" />
+                  <div className="h-2.5 bg-row rounded w-1/3" />
+                </div>
+                <div className="h-5 w-16 bg-row rounded-full" />
+              </div>
+            ))
+          ) : changes.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-muted text-center">No pending changes.</p>
+          ) : (
+            changes.map((c) => (
+              <div key={c.id} className="px-5 py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-primary leading-snug">{c.summary}</p>
+                  <p className="text-xs text-muted mt-0.5">
+                    {new Date(c.createdAt).toLocaleTimeString("en-GB")}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px] font-medium bg-amber-900/30 text-amber-300 border border-amber-700/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {MODULE_LABELS[c.module] ?? c.module}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function DraftModeBadge({ pendingCount, isCollapsed }: { pendingCount: number; isCollapsed: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {!isCollapsed ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-amber-900/30 border border-amber-700/30 hover:bg-amber-900/50 transition-colors"
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+          <span className="text-xs text-amber-300 font-medium">Draft Mode</span>
+          <span className="ml-auto text-xs bg-amber-700/50 text-amber-200 px-1.5 py-0.5 rounded-full">
+            {pendingCount}
+          </span>
+        </button>
+      ) : (
+        <button onClick={() => setOpen(true)} className="flex justify-center w-full py-1">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        </button>
+      )}
+      {open && <DraftModeModal onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -196,9 +302,9 @@ function CommitButton({ pendingCount, isCollapsed }: { pendingCount: number; isC
         {!isCollapsed && "Commit Configuration"}
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4"
           onClick={() => !pending && setOpen(false)}
         >
           <div
@@ -258,6 +364,7 @@ function CommitButton({ pendingCount, isCollapsed }: { pendingCount: number; isC
             )}
           </div>
         </div>
+        , document.body
       )}
     </>
   );

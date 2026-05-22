@@ -373,6 +373,23 @@ export async function commitAllAction(): Promise<{ applied: number }> {
   return { applied: changes.length };
 }
 
+export type PendingChangeSummary = {
+  id: string;
+  module: string;
+  summary: string;
+  createdAt: string;
+};
+
+export async function listPendingChangesAction(): Promise<PendingChangeSummary[]> {
+  const changes = await getPendingChanges();
+  return changes.map((c) => ({
+    id: c.id,
+    module: c.module,
+    summary: buildSummary(c, deriveAuditAction(c)),
+    createdAt: c.createdAt,
+  }));
+}
+
 export async function discardAllAction(): Promise<void> {
   await discardPendingChanges();
 
