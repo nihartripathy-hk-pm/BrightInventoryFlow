@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LCC — Liquidation Control Center (Prototype)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            app:          "rgb(var(--color-app) / <alpha-value>)",
+            card:         "rgb(var(--color-card) / <alpha-value>)",
+            row:          "rgb(var(--color-row) / <alpha-value>)",
+            border:       "rgb(var(--color-border) / <alpha-value>)",
+            primary:      "rgb(var(--color-primary) / <alpha-value>)",
+            muted:        "rgb(var(--color-muted) / <alpha-value>)",
+            "muted-dark": "rgb(var(--color-muted-dark) / <alpha-value>)",
+            accent: {
+              DEFAULT: "rgb(var(--color-accent) / <alpha-value>)",
+              hover:   "rgb(var(--color-accent-hover) / <alpha-value>)",
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root {
+      --color-app:          10 14 23;
+      --color-card:         20 25 34;
+      --color-row:          26 31 46;
+      --color-border:       30 35 51;
+      --color-primary:      226 232 240;
+      --color-muted:        148 163 184;
+      --color-muted-dark:   100 116 139;
+      --color-accent:       13 148 136;
+      --color-accent-hover: 15 118 110;
+      --scrollbar-track:       #0a0e17;
+      --scrollbar-thumb:       #1e2333;
+      --scrollbar-thumb-hover: #2d3748;
+      --range-track:           #1e2333;
+      --range-thumb-border:    #141922;
+    }
+    html.light {
+      --color-app:          248 250 252;
+      --color-card:         255 255 255;
+      --color-row:          241 245 249;
+      --color-border:       226 232 240;
+      --color-primary:      15 23 42;
+      --color-muted:        100 116 139;
+      --color-muted-dark:   148 163 184;
+      --color-accent:       13 148 136;
+      --color-accent-hover: 15 118 110;
+      --scrollbar-track:       #f8fafc;
+      --scrollbar-thumb:       #cbd5e1;
+      --scrollbar-thumb-hover: #94a3b8;
+      --range-track:           #e2e8f0;
+      --range-thumb-border:    #ffffff;
+    }
+    html, body {
+      background: rgb(var(--color-app));
+      color: rgb(var(--color-primary));
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+      70%  { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+      100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+    }
+    [x-cloak] { display: none; }
+  </style>
+</head>
+<body>
+  <div id="root" class="flex min-h-screen bg-app"></div>
+
+  <script>
+  /* ============================================================================
+     LCC PROTOTYPE — self-contained static replica of the Liquidation Control
+     Center module (Warehouse / Thresholds / Product / Approval / Audit).
+     All data is in-memory. Draft/commit workflow is fully functional.
+     ========================================================================== */
+
+  // ─── Seed data ────────────────────────────────────────────────────────────
+  const AUDIT_BASE = { createdBy: "prototype_user", createDt: "2026-07-02T09:00:00.000Z", updatedBy: null, updateDt: null };
+
+  const categories = [
+    { id: "CAT-01", name: "Vitamins & Supplements", shelfLifeOverridePct: null, isActive: true },
+    { id: "CAT-02", name: "Personal Care",          shelfLifeOverridePct: null, isActive: true },
+    { id: "CAT-03", name: "OTC Pharma",             shelfLifeOverridePct: null, isActive: true },
+    { id: "CAT-04", name: "Baby & Mother",          shelfLifeOverridePct: null, isActive: true },
+    { id: "CAT-05", name: "Sports Nutrition",       shelfLifeOverridePct: null, isActive: true },
+  ];
+
+  const brands = [
+    { id: "BRD-01", name: "LifeEssentials", categoryId: "CAT-01", shelfLifeOverridePct: 40,   isActive: true },
+    { id: "BRD-02", name: "VitaCore",       categoryId: "CAT-01", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-03", name: "PureSkin",       categoryId: "CAT-02", shelfLifeOverridePct: 25,   isActive: true },
+    { id: "BRD-04", name: "DermaCare",      categoryId: "CAT-02", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-05", name: "HealFast",       categoryId: "CAT-03", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-06", name: "MediRelief",     categoryId: "CAT-03", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-07", name: "TinySteps",      categoryId: "CAT-04", shelfLifeOverridePct: 60,   isActive: true },
+    { id: "BRD-08", name: "MamaBond",       categoryId: "CAT-04", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-09", name: "ProFuel",        categoryId: "CAT-05", shelfLifeOverridePct: null, isActive: false },
+    { id: "BRD-10", name: "EliteSport",     categoryId: "CAT-05", shelfLifeOverridePct: null, isActive: false },
+  ];
+
+  const warehouses = [
+    { id: "WH-MUM-01", name: "Mumbai DC",       locationCode: "MUM01", city: "Mumbai",    region: "West",  pincode: "400001", stockUnits: 45000, capacityPct: 72, isActive: true },
+    { id: "WH-DEL-01", name: "Delhi FC",        locationCode: "DEL01", city: "Delhi",     region: "North", pincode: "110001", stockUnits: 38000, capacityPct: 55, isActive: true },
+    { id: "WH-BLR-01", name: "Bengaluru Hub",   locationCode: "BLR01", city: "Bengaluru", region: "South", pincode: "560001", stockUnits: 52000, capacityPct: 81, isActive: true },
+    { id: "WH-CCU-01", name: "Kolkata FC",      locationCode: "CCU01", city: "Kolkata",   region: "East",  pincode: "700001", stockUnits: 29000, capacityPct: 48, isActive: true },
+    { id: "WH-HYD-01", name: "Hyderabad FC",    locationCode: "HYD01", city: "Hyderabad", region: "South", pincode: "500001", stockUnits: 33000, capacityPct: 61, isActive: true },
+    { id: "WH-LIQ-01", name: "Pune Liquidation",locationCode: "LIQ01", city: "Pune",      region: "West",  pincode: "411001", stockUnits: 12000, capacityPct: 35, isActive: true },
+  ];
+
+  const donorSettings = [
+    { warehouseId: "WH-MUM-01", isParticipating: true },
+    { warehouseId: "WH-DEL-01", isParticipating: true },
+    { warehouseId: "WH-BLR-01", isParticipating: true },
+    { warehouseId: "WH-CCU-01", isParticipating: true },
+    { warehouseId: "WH-HYD-01", isParticipating: true },
+    { warehouseId: "WH-LIQ-01", isParticipating: false },
+  ];
+
+  const overrides = [
+    { donorWarehouseId: "WH-MUM-01", sinkWarehouseId: "WH-CCU-01", isActive: true },
+    { donorWarehouseId: "WH-DEL-01", sinkWarehouseId: "WH-LIQ-01", isActive: false },
+    { donorWarehouseId: "WH-BLR-01", sinkWarehouseId: "WH-LIQ-01", isActive: false },
+  ];
+
+  const thresholdsGlobal = {
+    id: "global", cogsMin: 50000, cogsMax: 500000, unitsMin: 100, unitsMax: 10000,
+    weightMin: 50, weightMax: 5000, isActive: true, updateDt: "2026-07-02 09:00",
+  };
+
+  const categoryThresholds = [
+    { categoryId: "CAT-01", categoryName: "Vitamins & Supplements", cogsMin: 30000, cogsMax: 300000, unitsMin: 50, unitsMax: 5000, weightMin: 20, weightMax: 2000, isActive: true },
+    { categoryId: "CAT-03", categoryName: "OTC Pharma",             cogsMin: 75000, cogsMax: 750000, unitsMin: 200, unitsMax: 15000, weightMin: 100, weightMax: 8000, isActive: true },
+  ];
+
+  const brandThresholds = [
+    { brandId: "BRD-05", brandName: "HealFast", categoryId: "CAT-03", categoryName: "OTC Pharma", cogsMin: 100000, cogsMax: 1000000, unitsMin: 500, unitsMax: 20000, weightMin: 200, weightMax: 10000, isActive: true },
+  ];
+
+  const productConfig = {
+    id: "global", standardShelfLifePct: 30, opShelfLifePct: 50,
+    standardShelfLifeMinPct: null, opShelfLifeMinPct: null,
+    standardEnabled: true, opEnabled: true, isActive: true,
+  };
+
+  const inventoryConditions = [
+    { id: "cond_good",    conditionType: "good",    isEnabled: false, isActive: true },
+    { id: "cond_damaged", conditionType: "damaged", isEnabled: false, isActive: true },
+    { id: "cond_expired", conditionType: "expired", isEnabled: false, isActive: true },
+  ];
+
+  const skus = [
+    { id: "SKU-001", name: "VitaD3 2000IU",          brandId: "BRD-01", brandName: "LifeEssentials", categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 2400 },
+    { id: "SKU-002", name: "Omega-3 Fish Oil",       brandId: "BRD-01", brandName: "LifeEssentials", categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "standard", shelfLifeOverridePct: 45,   isIgnored: false, stockUnits: 1800 },
+    { id: "SKU-003", name: "Vitamin C 1000mg",       brandId: "BRD-01", brandName: "LifeEssentials", categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 950 },
+    { id: "SKU-004", name: "B-Complex Max",          brandId: "BRD-02", brandName: "VitaCore",       categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "standard", shelfLifeOverridePct: null, isIgnored: true,  stockUnits: 320 },
+    { id: "SKU-005", name: "Zinc Picolinate",        brandId: "BRD-02", brandName: "VitaCore",       categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1200 },
+    { id: "SKU-006", name: "Magnesium Citrate",      brandId: "BRD-02", brandName: "VitaCore",       categoryId: "CAT-01", categoryName: "Vitamins & Supplements", type: "op",       shelfLifeOverridePct: 35,   isIgnored: false, stockUnits: 780 },
+    { id: "SKU-007", name: "Daily Moisturiser SPF30",brandId: "BRD-03", brandName: "PureSkin",       categoryId: "CAT-02", categoryName: "Personal Care",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 3100 },
+    { id: "SKU-008", name: "Gentle Foam Cleanser",   brandId: "BRD-03", brandName: "PureSkin",       categoryId: "CAT-02", categoryName: "Personal Care",          type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 780 },
+    { id: "SKU-009", name: "Vitamin C Serum",        brandId: "BRD-03", brandName: "PureSkin",       categoryId: "CAT-02", categoryName: "Personal Care",          type: "standard", shelfLifeOverridePct: 20,   isIgnored: false, stockUnits: 1450 },
+    { id: "SKU-010", name: "Retinol Night Cream",    brandId: "BRD-04", brandName: "DermaCare",      categoryId: "CAT-02", categoryName: "Personal Care",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 890 },
+    { id: "SKU-011", name: "Hyaluronic Acid Serum",  brandId: "BRD-04", brandName: "DermaCare",      categoryId: "CAT-02", categoryName: "Personal Care",          type: "op",       shelfLifeOverridePct: null, isIgnored: true,  stockUnits: 230 },
+    { id: "SKU-012", name: "Sunscreen SPF50",        brandId: "BRD-04", brandName: "DermaCare",      categoryId: "CAT-02", categoryName: "Personal Care",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 2200 },
+    { id: "SKU-013", name: "Ibuprofen 400mg",        brandId: "BRD-05", brandName: "HealFast",       categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 5000 },
+    { id: "SKU-014", name: "Paracetamol 500mg",      brandId: "BRD-05", brandName: "HealFast",       categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 4200 },
+    { id: "SKU-015", name: "Antacid Tablets",        brandId: "BRD-05", brandName: "HealFast",       categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1600 },
+    { id: "SKU-016", name: "Antihistamine 10mg",     brandId: "BRD-06", brandName: "MediRelief",     categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 2800 },
+    { id: "SKU-017", name: "Cough Syrup 100ml",      brandId: "BRD-06", brandName: "MediRelief",     categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1100 },
+    { id: "SKU-018", name: "Eye Drops 10ml",         brandId: "BRD-06", brandName: "MediRelief",     categoryId: "CAT-03", categoryName: "OTC Pharma",             type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 670 },
+    { id: "SKU-019", name: "Baby Shampoo 200ml",     brandId: "BRD-07", brandName: "TinySteps",      categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 2900 },
+    { id: "SKU-020", name: "Baby Lotion 150ml",      brandId: "BRD-07", brandName: "TinySteps",      categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "standard", shelfLifeOverridePct: 55,   isIgnored: false, stockUnits: 3400 },
+    { id: "SKU-021", name: "Baby Wipes 80pcs",       brandId: "BRD-07", brandName: "TinySteps",      categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 4800 },
+    { id: "SKU-022", name: "Prenatal Vitamins",      brandId: "BRD-08", brandName: "MamaBond",       categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1300 },
+    { id: "SKU-023", name: "Nursing Pads 60pcs",     brandId: "BRD-08", brandName: "MamaBond",       categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 980 },
+    { id: "SKU-024", name: "Stretch Mark Cream",     brandId: "BRD-08", brandName: "MamaBond",       categoryId: "CAT-04", categoryName: "Baby & Mother",          type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 740 },
+    { id: "SKU-025", name: "Whey Protein 1kg",       brandId: "BRD-09", brandName: "ProFuel",        categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1900 },
+    { id: "SKU-026", name: "BCAA Powder 300g",       brandId: "BRD-09", brandName: "ProFuel",        categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1400 },
+    { id: "SKU-027", name: "Creatine Monohydrate",   brandId: "BRD-09", brandName: "ProFuel",        categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "op",       shelfLifeOverridePct: null, isIgnored: false, stockUnits: 860 },
+    { id: "SKU-028", name: "Pre-Workout 250g",       brandId: "BRD-10", brandName: "EliteSport",     categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 1150 },
+    { id: "SKU-029", name: "Electrolyte Tabs 20s",   brandId: "BRD-10", brandName: "EliteSport",     categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "standard", shelfLifeOverridePct: null, isIgnored: false, stockUnits: 2600 },
+    { id: "SKU-030", name: "Protein Bar 12-pack",    brandId: "BRD-10", brandName: "EliteSport",     categoryId: "CAT-05", categoryName: "Sports Nutrition",       type: "op",       shelfLifeOverridePct: null, isIgnored: true,  stockUnits: 440 },
+  ];
+
+  const batches = [
+    { id: "LIQ-2024-0047", masterSinkId: "WH-LIQ-01", masterSinkName: "Pune Liquidation", status: "pending_approval", generatedAt: "2026-07-02T07:00:00.000Z" },
+  ];
+
+  const orders = [
+    { id: "TXN-0047-001", batchId: "LIQ-2024-0047", type: "wh_transfer", sourceWarehouseId: "WH-MUM-01", sourceName: "Mumbai DC",    destinationWarehouseId: "WH-LIQ-01", destinationName: "Pune Liquidation", units: 1200, cogs: 95000, weight: 620, status: "pending" },
+    { id: "TXN-0047-002", batchId: "LIQ-2024-0047", type: "wh_transfer", sourceWarehouseId: "WH-DEL-01", sourceName: "Delhi FC",      destinationWarehouseId: "WH-LIQ-01", destinationName: "Pune Liquidation", units: 850,  cogs: 67500, weight: 410, status: "pending" },
+    { id: "TXN-0047-003", batchId: "LIQ-2024-0047", type: "b2b",         sourceWarehouseId: "WH-BLR-01", sourceName: "Bengaluru Hub", destinationWarehouseId: "WH-LIQ-01", destinationName: "Pune Liquidation", units: 400,  cogs: 25000, weight: 210, status: "pending" },
+    { id: "TXN-0046-004", batchId: "LIQ-2024-0046", type: "liq_stock",   sourceWarehouseId: "WH-HYD-01", sourceName: "Hyderabad FC",  destinationWarehouseId: "WH-LIQ-01", destinationName: "Pune Liquidation", units: 640,  cogs: 41200, weight: 305, status: "in_transit" },
+    { id: "TXN-0046-005", batchId: "LIQ-2024-0046", type: "wh_transfer", sourceWarehouseId: "WH-CCU-01", sourceName: "Kolkata FC",    destinationWarehouseId: "WH-LIQ-01", destinationName: "Pune Liquidation", units: 300,  cogs: 18900, weight: 140, status: "cancelled" },
+  ];
+
+  const lineItems = [
+    { id: "LI-001", orderId: "TXN-0047-001", skuId: "SKU-013", skuName: "Ibuprofen 400mg",         units: 400, cogs: 38000, expiryDate: "2024-07-15" },
+    { id: "LI-002", orderId: "TXN-0047-001", skuId: "SKU-014", skuName: "Paracetamol 500mg",       units: 350, cogs: 28000, expiryDate: "2024-09-30" },
+    { id: "LI-003", orderId: "TXN-0047-001", skuId: "SKU-015", skuName: "Antacid Tablets",         units: 450, cogs: 29000, expiryDate: "2024-06-20" },
+    { id: "LI-004", orderId: "TXN-0047-002", skuId: "SKU-002", skuName: "Omega-3 Fish Oil",        units: 200, cogs: 18000, expiryDate: "2024-10-15" },
+    { id: "LI-005", orderId: "TXN-0047-002", skuId: "SKU-006", skuName: "Magnesium Citrate",       units: 250, cogs: 20500, expiryDate: "2024-07-31" },
+    { id: "LI-006", orderId: "TXN-0047-002", skuId: "SKU-003", skuName: "Vitamin C 1000mg",        units: 400, cogs: 29000, expiryDate: "2025-01-10" },
+    { id: "LI-007", orderId: "TXN-0047-003", skuId: "SKU-007", skuName: "Daily Moisturiser SPF30", units: 150, cogs: 12000, expiryDate: "2024-08-05" },
+    { id: "LI-008", orderId: "TXN-0047-003", skuId: "SKU-008", skuName: "Gentle Foam Cleanser",    units: 100, cogs: 6500,  expiryDate: null },
+    { id: "LI-009", orderId: "TXN-0047-003", skuId: "SKU-009", skuName: "Vitamin C Serum",         units: 80,  cogs: 4500,  expiryDate: "2024-07-28" },
+    { id: "LI-010", orderId: "TXN-0047-003", skuId: "SKU-016", skuName: "Antihistamine 10mg",      units: 70,  cogs: 2000,  expiryDate: "2024-12-31" },
+  ];
+
+  const auditLogs = [
+    { id: "AUD-0001", eventDt: "2026-07-01T09:00:00.000Z", module: "warehouse_setup",     action: "donor_participation_updated", entity: "donor_participation", entityId: "WH-MUM-01",    summary: "Participation enabled for Mumbai DC",                         userId: "system", sessionId: "seed-session-001", beforeJson: JSON.stringify({ isParticipating: false }), afterJson: JSON.stringify({ isParticipating: true }) },
+    { id: "AUD-0002", eventDt: "2026-07-01T13:00:00.000Z", module: "product_config",      action: "sku_ignored",                 entity: "sku_config",          entityId: "SKU-004",      summary: "B-Complex Max marked as ignored",                             userId: "system", sessionId: "seed-session-001", beforeJson: JSON.stringify({ isIgnored: false }),         afterJson: JSON.stringify({ isIgnored: true }) },
+    { id: "AUD-0003", eventDt: "2026-07-01T17:00:00.000Z", module: "transfer_thresholds", action: "global_threshold_updated",    entity: "global_threshold",    entityId: null,           summary: "COGS min updated from ₹40,000 to ₹50,000",                    userId: "system", sessionId: "seed-session-001", beforeJson: JSON.stringify({ cogsMin: 40000 }),           afterJson: JSON.stringify({ cogsMin: 50000 }) },
+    { id: "AUD-0004", eventDt: "2026-07-01T21:00:00.000Z", module: "product_config",      action: "brand_shelf_life_updated",    entity: "brand_shelf_life",    entityId: "BRD-01",       summary: "Shelf life override set to 40% for LifeEssentials",           userId: "system", sessionId: "seed-session-001", beforeJson: JSON.stringify({ shelfLifeOverridePct: null }),afterJson: JSON.stringify({ shelfLifeOverridePct: 40 }) },
+    { id: "AUD-0005", eventDt: "2026-07-02T01:00:00.000Z", module: "warehouse_setup",     action: "route_pair_override_set",     entity: "pair_override",       entityId: "WH-MUM-01",    summary: "Custom sink assigned: Kolkata FC",                            userId: "priya.nair",  sessionId: "seed-session-002", beforeJson: JSON.stringify({ customSink: null }),         afterJson: JSON.stringify({ customSink: "WH-CCU-01" }) },
+    { id: "AUD-0006", eventDt: "2026-07-02T07:00:00.000Z", module: "transfer_approval",   action: "batch_reviewed",              entity: "batch_runs",          entityId: "LIQ-2024-0047",summary: "Batch generated — 3 orders, ₹1,87,500 COGS pending approval", userId: "system", sessionId: "seed-session-001", beforeJson: JSON.stringify({}),                           afterJson: JSON.stringify({ status: "pending_approval" }) },
+    { id: "AUD-0007", eventDt: "2026-07-02T08:00:00.000Z", module: "draft",               action: "configuration_committed",     entity: "draft",               entityId: null,           summary: "6 changes committed",                                         userId: "nihar.tripathy", sessionId: "seed-session-003", beforeJson: JSON.stringify({ pendingCount: 6 }),      afterJson: JSON.stringify({ pendingCount: 0 }) },
+  ];
+
+  // ─── Store / state ──────────────────────────────────────────────────────────
+  const S = {
+    route: "warehouse",
+    collapsed: false,
+    theme: "dark",
+    pending: [],           // {id, module, entity, op, targetId, payload, createdAt}
+    auditLogs: auditLogs.slice(),
+    masterSinkId: "WH-LIQ-01",
+    // per-page UI state
+    whTab: "network", whNetQ: "", whDonorQ: "", whDonorFilter: "all", whShowAdd: false, whAddDonor: "", whAddSink: "", whRouteSrcQ: "", whRouteDstQ: "",
+    thTab: "global", thCatShowAdd: false, thCatAdd: "", thCatLocal: [], thBrandShowAdd: false, thBrandAdd: "", thBrandLocal: [],
+    prTab: "global", prBrandShowAdd: false, prBrandAdd: "", prSkuQ: "", prSkuElig: "all", prSkuType: "all", prSkuShowAdd: false, prSkuAdd: "",
+    apTab: "Pending Approval", apExpanded: {}, apAuth: "", apCommitted: false, apReject: false,
+    txnSearch: "", txnStatus: "all", txnToast: null,
+    auTab: "pending", auSearch: "", auModule: "all", auAction: "all", auUser: "all", auExpanded: {},
+    // modals
+    draftModalOpen: false, commitModalOpen: false, commitResult: false, discardConfirm: false,
+    focus: null, // {sel, start, end}
+  };
+
+  let _uid = 0;
+  const uid = () => `pc_${Date.now().toString(36)}_${_uid++}`;
+
+  // ─── Pending change helpers ──────────────────────────────────────────────────
+  function stageChange(module, entity, op, targetId, payload) {
+    // dedupe: master_sink dedupes across all master_sink rows; others by (module,entity,targetId)
+    if (entity === "master_sink") {
+      S.pending = S.pending.filter((c) => c.entity !== "master_sink");
+    } else {
+      S.pending = S.pending.filter(
+        (c) => !(c.module === module && c.entity === entity && (c.targetId ?? null) === (targetId ?? null))
+      );
+    }
+    S.pending.push({ id: uid(), module, entity, op, targetId: targetId ?? null, payload: payload || {}, createdAt: new Date().toISOString() });
+  }
+  function pendingBy(pred) { return S.pending.filter(pred); }
+
+  // ─── Effective (base + pending) getters ──────────────────────────────────────
+  function effMasterSinkId() {
+    const p = S.pending.find((c) => c.entity === "master_sink");
+    if (p) return p.op === "set" ? p.targetId : null;
+    return S.masterSinkId;
+  }
+  function effDonorParticipating(whId) {
+    if (whId === effMasterSinkId()) return false;
+    const p = S.pending.find((c) => c.entity === "donor_participation" && c.targetId === whId);
+    if (p) return p.payload.isParticipating;
+    return donorSettings.find((d) => d.warehouseId === whId)?.isParticipating ?? true;
+  }
+  function pendingDonorIds() { return new Set(S.pending.filter((c) => c.entity === "donor_participation").map((c) => c.targetId)); }
+  function effOverrideSink(donorId) {
+    const p = S.pending.find((c) => c.entity === "pair_override" && c.targetId === donorId);
+    if (p) return p.op === "set" ? p.payload.sinkId : null;
+    const ex = overrides.find((o) => o.donorWarehouseId === donorId && o.isActive);
+    return ex ? ex.sinkWarehouseId : null;
+  }
+  function pendingOverrideIds() { return new Set(S.pending.filter((c) => c.entity === "pair_override").map((c) => c.targetId)); }
+  </script>
+
+  <script id="views-1">
+  /* ─── small utils ─────────────────────────────────────────────────────────── */
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const nf = (n) => Number(n).toLocaleString("en-GB");
+  const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-GB");
+  const fmtTimeHMS = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const fmtDate = (iso) => new Date(iso).toLocaleDateString("en-GB");
+  const fmtDateTime = (iso) => new Date(iso).toLocaleString("en-GB");
+
+  const ICON = {
+    products: `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/></svg>`,
+    warehouse: `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75L12 3l9 6.75V21a.75.75 0 01-.75.75H3.75A.75.75 0 013 21V9.75z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9 21V12h6v9"/></svg>`,
+    thresholds: `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9h12M6 15h12M4 6h.01M4 12h.01M4 18h.01M20 6h.01M20 12h.01M20 18h.01"/></svg>`,
+    approval: `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+    audit: `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>`,
+    chevR: `<svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`,
+    search: `<svg class="w-3.5 h-3.5 text-muted-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>`,
+    pin: `<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>`,
+    xmark: `<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  };
+
+  const nav = [
+    { href: "warehouse", label: "Warehouse", key: "warehouse", icon: ICON.warehouse },
+    { href: "product", label: "Products", key: "product", icon: ICON.products },
+    { href: "thresholds", label: "Transfer Thresholds", key: "thresholds", icon: ICON.thresholds },
+    { href: "approval", label: "Transfer Approval", key: "approval", icon: ICON.approval },
+    { href: "audit", label: "Audit Log", key: "audit", icon: ICON.audit },
+  ];
+
+  const pendingBadge = () =>
+    `<span title="Staged — not yet committed" class="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-900/30 text-amber-300 border border-amber-700/30 px-1.5 py-0.5 rounded-full whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>Pending</span>`;
+
+  // Toggle: data-toggle carries an action id resolved in wireup
+  function toggle(checked, action, disabled) {
+    const dis = disabled ? "opacity-50 cursor-not-allowed" : "";
+    return `<div role="switch" aria-checked="${checked}" ${disabled ? "" : `data-toggle="${esc(action)}"`} class="relative inline-flex w-10 h-5 rounded-full ${disabled ? "" : "cursor-pointer"} transition-colors duration-200 ${checked ? "bg-accent" : "bg-[#2d3748]"} ${dis}"><span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0.5"}"></span></div>`;
+  }
+
+  // Inline edit number. key uniquely identifies the field. action id used on commit.
+  function inlineEdit(key, value, action, opts) {
+    opts = opts || {};
+    const { prefix = "", suffix = "", placeholder = "—" } = opts;
+    if (S.editKey === key) {
+      return `<input data-inline-input="${esc(action)}" type="number" value="${S.editDraft ?? ""}" class="bg-row border border-border focus:border-accent rounded px-2 py-1 text-sm text-primary w-28 outline-none" />`;
+    }
+    const display = value !== null && value !== undefined && value !== "" ? `${prefix}${value}${suffix}` : placeholder;
+    return `<span data-inline="${esc(key)}" data-inline-val="${value === null || value === undefined ? "" : esc(value)}" class="cursor-pointer text-sm text-primary hover:text-accent transition-colors">${esc(display)}</span>`;
+  }
+
+  // Searchable select (open state via S.openSel). options: [{id,name}]
+  function searchSelect(selId, options, value, action, opts) {
+    opts = opts || {};
+    const { placeholder = "—", searchPlaceholder = "Search…" } = opts;
+    const selected = options.find((o) => o.id === value);
+    const open = S.openSel === selId;
+    const q = open ? (S.selQ || "") : "";
+    const filtered = q ? options.filter((o) => `${o.name} ${o.id}`.toLowerCase().includes(q.toLowerCase())) : options;
+    let menu = "";
+    if (open) {
+      menu = `<div class="absolute z-50 mt-1 w-full min-w-[260px] bg-card border border-border rounded-md shadow-lg">
+        <div class="p-1.5 border-b border-border"><input autofocus data-sel-search="${esc(selId)}" type="text" placeholder="${esc(searchPlaceholder)}" value="${esc(q)}" class="w-full bg-row border border-border rounded px-2 py-1 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent" /></div>
+        <ul class="max-h-52 overflow-y-auto py-1">
+          ${filtered.length === 0 ? `<li class="px-3 py-2 text-sm text-muted">No results</li>` :
+            filtered.map((o) => `<li data-sel-pick="${esc(action)}" data-sel-val="${esc(o.id)}" class="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer transition-colors ${o.id === value ? "bg-accent/10 text-accent" : "text-primary hover:bg-row"}">${o.id === value ? `<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>` : ""}<span class="${o.id === value ? "" : "pl-5"}">${esc(o.name)} (${esc(o.id)})</span></li>`).join("")}
+        </ul></div>`;
+    }
+    return `<div class="relative inline-block min-w-[220px]" data-sel-root="${esc(selId)}">
+      <button type="button" data-sel-toggle="${esc(selId)}" class="w-full flex items-center justify-between gap-2 bg-row border border-border rounded-md px-2 py-1.5 text-sm text-primary focus:outline-none focus:border-accent transition-colors">
+        <span class="truncate">${selected ? `${esc(selected.name)} (${esc(selected.id)})` : esc(placeholder)}</span>
+        <svg class="w-3.5 h-3.5 flex-shrink-0 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>${menu}</div>`;
+  }
+
+  function tabBar(tabs, active, action) {
+    return `<div class="bg-row p-1 rounded-lg inline-flex gap-1">${tabs.map((t) =>
+      `<button data-tab="${esc(action)}" data-tab-key="${esc(t.key)}" class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer ${active === t.key ? "bg-card text-primary shadow-sm" : "text-muted hover:text-primary"}">${esc(t.label)}</button>`
+    ).join("")}</div>`;
+  }
+
+  function csvPanel(title, columns) {
+    // Static, non-functional collapsible visual (upload is a no-op in the prototype)
+    const id = "csv_" + title.replace(/\W+/g, "_");
+    const open = S.csvOpen === id;
+    return `<div class="mb-4">
+      <button data-csv="${esc(id)}" class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${open ? "border-accent/50 text-accent bg-accent/5" : "border-border text-muted hover:text-primary hover:border-border/80"}">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        <span>Bulk Upload via CSV</span>
+        <svg class="w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      ${open ? `<div class="mt-2 bg-card border border-border rounded-xl p-4">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div><p class="font-semibold text-primary text-sm">${esc(title)}</p>
+          <p class="text-xs text-muted mt-1">Columns: ${columns.map((c) => `<code class="bg-row border border-border px-1.5 py-0.5 rounded text-xs font-mono text-muted mx-0.5">${esc(c)}</code>`).join("")}</p></div>
+          <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted hover:text-primary text-xs whitespace-nowrap transition-colors"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Download Template</button>
+        </div>
+        <div class="border-2 border-dashed rounded-lg py-10 text-center cursor-pointer transition-colors border-border hover:border-accent/40 hover:bg-row/40">
+          <svg class="w-8 h-8 text-muted-dark mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          <p class="text-muted text-sm">Drop CSV here or click to browse</p>
+          <p class="text-muted-dark text-xs mt-1">Only .csv files accepted</p>
+        </div>
+      </div>` : ""}
+    </div>`;
+  }
+
+  /* ─── Sidebar ─────────────────────────────────────────────────────────────── */
+  function renderSidebar() {
+    const c = S.collapsed;
+    const count = S.pending.length;
+    const lastSaved = count > 0 ? fmtTime(S.pending[S.pending.length - 1].createdAt) : null;
+    const isDark = S.theme === "dark";
+
+    const draftBadge = count > 0 ? (!c
+      ? `<button data-act="open-draft" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-amber-900/30 border border-amber-700/30 hover:bg-amber-900/50 transition-colors"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span><span class="text-xs text-amber-300 font-medium">Draft Mode</span><span class="ml-auto text-xs bg-amber-700/50 text-amber-200 px-1.5 py-0.5 rounded-full">${count}</span></button>`
+      : `<button data-act="open-draft" class="flex justify-center w-full py-1"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span></button>`) : "";
+
+    const commitBtn = `<button data-act="open-commit" ${count === 0 ? "disabled" : ""} title="${c ? "Commit Configuration" : ""}" class="py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${c ? "px-2" : "w-full px-3"}"><svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>${c ? "" : "Commit Configuration"}</button>`;
+
+    let discardBtn = "";
+    if (count > 0) {
+      if (c) {
+        discardBtn = `<button data-act="discard-now" title="Discard all changes" class="w-full py-1.5 rounded-lg border border-border text-muted hover:text-red-400 hover:border-red-900/50 text-xs transition-colors flex items-center justify-center">${ICON.xmark}</button>`;
+      } else if (S.discardConfirm) {
+        discardBtn = `<div class="flex gap-1.5"><button data-act="discard-cancel" class="flex-1 py-1.5 rounded-lg border border-border text-muted text-xs hover:text-primary transition-colors">Cancel</button><button data-act="discard-now" class="flex-1 py-1.5 rounded-lg bg-red-900/40 border border-red-800/40 text-red-400 text-xs hover:bg-red-900/60 transition-colors">Confirm</button></div>`;
+      } else {
+        discardBtn = `<button data-act="discard-ask" class="w-full py-1.5 rounded-lg border border-border text-muted hover:text-red-400 hover:border-red-900/50 text-xs transition-colors">Discard all changes</button>`;
+      }
+    }
+
+    const themeToggle = `<button data-act="theme" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-muted hover:text-primary hover:bg-row text-sm transition-colors ${c ? "justify-center" : ""}">${isDark
+      ? `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`
+      : `<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>`}${c ? "" : `<span>${isDark ? "Light mode" : "Dark mode"}</span>`}</button>`;
+
+    return `<aside class="fixed left-0 top-0 h-screen bg-card border-r border-border flex flex-col overflow-y-auto overflow-x-hidden transition-[width] duration-200 ${c ? "w-14" : "w-60"}">
+      <button data-act="collapse" class="absolute -right-3 top-5 z-10 w-6 h-6 rounded-full bg-card border border-border flex items-center justify-center text-muted hover:text-primary hover:bg-row transition-colors" title="${c ? "Expand sidebar" : "Collapse sidebar"}">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="${c ? "M8.25 4.5l7.5 7.5-7.5 7.5" : "M15.75 19.5L8.25 12l7.5-7.5"}"/></svg>
+      </button>
+      <div class="border-b border-border flex-shrink-0 ${c ? "p-3.5" : "p-5"}">
+        ${c ? `<p class="text-lg font-bold tracking-tight text-primary text-center">L</p>`
+          : `<p class="text-lg font-bold tracking-tight text-primary">LCC</p><p class="text-xs text-muted mt-0.5">Liquidation Control Center</p><p class="text-xs text-muted-dark mt-0.5">Brightlife Care</p>`}
+      </div>
+      <nav class="flex-1 p-2 flex flex-col gap-0.5 mt-2">
+        ${nav.map((item) => {
+          const active = S.route === item.key;
+          return `<a data-nav="${item.key}" title="${c ? item.label : ""}" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors cursor-pointer ${c ? "justify-center" : ""} ${active ? "bg-accent/10 text-accent" : "text-muted hover:text-primary hover:bg-row"}">${item.icon}${c ? "" : `<span>${item.label}</span>`}</a>`;
+        }).join("")}
+      </nav>
+      <div class="border-t border-border flex flex-col gap-2 flex-shrink-0 ${c ? "p-2" : "p-3"}">
+        ${draftBadge}
+        ${commitBtn}
+        ${discardBtn}
+        ${!c ? (lastSaved ? `<p class="text-xs text-muted-dark text-center">Last change: ${lastSaved}</p>` : `<p class="text-xs text-muted-dark text-center">No pending changes</p>`) : ""}
+        <div class="border-t border-border pt-2 mt-1">${themeToggle}</div>
+      </div>
+    </aside>`;
+  }
+  </script>
+  <script id="views-2">
+  /* ═══════════════════════ WAREHOUSE PAGE ═══════════════════════ */
+  function pageWarehouse() {
+    const sinkId = effMasterSinkId();
+    const active = warehouses.filter((w) => w.isActive);
+    const participating = active.filter((w) => w.id !== sinkId && effDonorParticipating(w.id)).length;
+    const bypassed = active.filter((w) => w.id !== sinkId).length - participating;
+    const sinkName = active.find((w) => w.id === sinkId)?.name ?? sinkId;
+    const pMasterSink = S.pending.some((c) => c.entity === "master_sink");
+
+    const tabs = [
+      { key: "network", label: "Warehouse Network" },
+      { key: "donor", label: "Donor Network" },
+      { key: "routes", label: "Route Pair Overrides" },
+    ];
+
+    let body = "";
+    if (S.whTab === "network") body = whNetwork(active, sinkId, pMasterSink);
+    else if (S.whTab === "donor") body = whDonor(active, sinkId);
+    else body = whRoutes(active, sinkId, sinkName);
+
+    return `<div class="p-8">
+      <div class="mb-6">
+        <div class="flex items-start justify-between gap-4">
+          <div><h1 class="text-2xl font-semibold text-primary">Warehouse Setup</h1><p class="text-muted text-sm mt-1">Configure routing destinations and donor participation</p></div>
+          ${sinkId ? `<span class="flex items-center gap-1.5 text-xs text-accent bg-accent/10 px-3 py-1.5 rounded-full border border-accent/20 whitespace-nowrap flex-shrink-0">${ICON.pin}Master Sink: ${esc(sinkName)}</span>` : ""}
+        </div>
+        <div class="flex items-center gap-3 mt-4 flex-wrap">
+          <span class="text-xs text-muted bg-row px-3 py-1.5 rounded-full border border-border">${active.length} warehouses</span>
+          <span class="text-xs text-green-400 bg-green-900/20 px-3 py-1.5 rounded-full border border-green-800/30">${participating} participating</span>
+          <span class="text-xs text-red-400 bg-red-900/20 px-3 py-1.5 rounded-full border border-red-800/30">${bypassed} bypassed</span>
+        </div>
+      </div>
+      ${tabBar(tabs, S.whTab, "whTab")}
+      <div class="mt-6">${body}</div>
+    </div>`;
+  }
+
+  function whNetwork(active, sinkId, pMasterSink) {
+    const q = S.whNetQ;
+    const filtered = q
+      ? active.filter((w) => [w.name, w.id, w.city, w.locationCode].some((x) => x.toLowerCase().includes(q.toLowerCase())))
+      : active.filter((w) => w.id === sinkId);
+    const cards = filtered.map((w) => {
+      const isSink = w.id === sinkId;
+      const capColor = w.capacityPct >= 80 ? "bg-red-500" : w.capacityPct >= 60 ? "bg-amber-500" : "bg-green-500";
+      return `<div class="bg-card border rounded-xl p-4 transition-all ${isSink ? "border-accent ring-1 ring-accent/20" : "border-border hover:border-border/80"}">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0"><div class="font-medium text-primary truncate">${esc(w.name)}</div><div class="text-xs text-muted font-mono mt-0.5">${w.id} · ${esc(w.city)}</div></div>
+          ${isSink ? `<span class="shrink-0 text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 whitespace-nowrap">Master Sink</span>` : `<span class="shrink-0 text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">Donor</span>`}
+        </div>
+        <div class="text-xs text-muted mt-2">${nf(w.stockUnits)} units</div>
+        <div class="h-1.5 rounded-full bg-[#1e2333] mt-2"><div class="h-1.5 rounded-full transition-all ${capColor}" style="width:${Math.min(100, w.capacityPct)}%"></div></div>
+        <div class="text-xs text-muted mt-1">${w.capacityPct}% capacity</div>
+        ${isSink ? `<p class="text-xs text-muted mt-3 bg-accent/5 rounded p-2">📍 All liquidated inventory routes here</p>`
+          : `<button data-act="set-sink" data-id="${w.id}" class="w-full mt-3 py-1.5 text-xs border border-border hover:border-accent hover:text-accent text-muted rounded-lg transition-colors">Set as Master Sink</button>`}
+      </div>`;
+    }).join("");
+    let empty = "";
+    if (filtered.length === 0) empty = `<div class="col-span-full text-center text-sm text-muted py-12 border border-dashed border-border rounded-xl">${q ? `No warehouses match &ldquo;${esc(q)}&rdquo;` : "No master sink configured. Search a warehouse above to set one."}</div>`;
+    return `<div>
+      <div class="flex items-center gap-3 mb-4">
+        <input data-input="whNetQ" value="${esc(q)}" placeholder="Search warehouses to change master sink…" class="flex-1 max-w-sm bg-row border border-border rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors" />
+        ${pMasterSink ? pendingBadge() : ""}
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">${cards}${empty}</div>
+    </div>`;
+  }
+
+  function whDonor(active, sinkId) {
+    const q = S.whDonorQ, f = S.whDonorFilter;
+    const pIds = pendingDonorIds();
+    const filtered = active.filter((w) => {
+      if (q) { const ql = q.toLowerCase(); if (![w.name, w.id, w.city].some((x) => x.toLowerCase().includes(ql))) return false; }
+      if (f === "all") return true;
+      const p = effDonorParticipating(w.id);
+      if (w.id === sinkId) return f === "disabled";
+      return f === "enabled" ? p : !p;
+    });
+    const filters = [["all", "All"], ["enabled", "Enabled"], ["disabled", "Disabled"]];
+    const rows = filtered.map((w) => {
+      const isSink = w.id === sinkId;
+      const part = effDonorParticipating(w.id);
+      const statusBadge = isSink
+        ? `<span class="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">Master Sink</span>`
+        : part
+          ? `<span class="text-xs px-2 py-0.5 rounded-full bg-green-900/20 text-green-400 border border-green-800/30">Participating</span>`
+          : `<span class="text-xs px-2 py-0.5 rounded-full bg-red-900/20 text-red-400 border border-red-800/30">Bypassed</span>`;
+      return `<tr class="border-b border-border transition-opacity ${isSink ? "opacity-50" : ""}">
+        <td class="py-3 pr-4"><div class="font-medium text-primary">${esc(w.name)}</div><div class="text-xs text-muted font-mono mt-0.5">${w.id}</div></td>
+        <td class="py-3 pr-4"><div class="text-sm text-muted">${esc(w.city)}</div><div class="text-xs text-muted-dark">${w.locationCode}</div></td>
+        <td class="py-3 pr-4 text-right text-sm text-muted">${nf(w.stockUnits)}</td>
+        <td class="py-3 pr-4 text-center"><div class="flex items-center justify-center gap-1.5">${statusBadge}${pIds.has(w.id) ? pendingBadge() : ""}</div></td>
+        <td class="py-3 text-center">${toggle(part, `donor:${w.id}`, isSink)}</td>
+      </tr>`;
+    }).join("");
+    return `<div>
+      <div class="flex gap-3 bg-violet-900/15 border border-violet-800/30 rounded-xl px-4 py-3 mb-4">
+        <svg class="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8h.01M12 12v4"/></svg>
+        <p class="text-xs text-muted leading-relaxed"><span class="text-violet-400 font-semibold">Bypassed donors</span> are invisible to the liquidation engine — no transfers will be suggested or executed from them. The Master Sink is automatically protected from donor participation.</p>
+      </div>
+      ${csvPanel("Donor Network Bulk Upload", ["warehouse_id", "participation"])}
+      <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <div class="relative flex-1 min-w-[200px]"><span class="absolute left-3 top-1/2 -translate-y-1/2">${ICON.search}</span><input data-input="whDonorQ" value="${esc(q)}" placeholder="Search warehouse name, ID, city..." class="w-full bg-row border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors" /></div>
+        <div class="flex items-center rounded-lg border border-border overflow-hidden">${filters.map(([k, l]) => `<button data-act="whDonorFilter" data-val="${k}" class="px-3 py-2 text-xs font-medium transition-colors ${f === k ? "bg-accent/10 text-accent" : "text-muted hover:text-primary"}">${l}</button>`).join("")}</div>
+        <span class="text-xs text-muted-dark whitespace-nowrap">${filtered.length} / ${active.length}</span>
+      </div>
+      <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-muted uppercase tracking-wider border-b border-border">
+        <th class="text-left pb-2 font-medium">Warehouse</th><th class="text-left pb-2 font-medium">Location</th><th class="text-right pb-2 font-medium">Stock</th><th class="text-center pb-2 font-medium">Status</th><th class="text-center pb-2 font-medium">Participation</th>
+      </tr></thead><tbody>${rows || `<tr><td colspan="5" class="text-center text-muted py-10 text-sm">No warehouses match this filter.</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
+
+  function whRoutes(active, sinkId, sinkName) {
+    const pIds = pendingOverrideIds();
+    const donors = active.filter((w) => w.id !== sinkId);
+    const withOverride = donors.filter((w) => effOverrideSink(w.id) !== null);
+    const srcQ = S.whRouteSrcQ, dstQ = S.whRouteDstQ;
+    const filtered = withOverride.filter((w) => {
+      if (srcQ) { const q = srcQ.toLowerCase(); if (![w.name, w.id, w.city].some((x) => x.toLowerCase().includes(q))) return false; }
+      if (dstQ) { const q = dstQ.toLowerCase(); const sid = effOverrideSink(w.id); const dn = sid ? (active.find((x) => x.id === sid)?.name ?? sid) : sinkName; if (!dn.toLowerCase().includes(q)) return false; }
+      return true;
+    });
+    const donorOpts = donors.filter((w) => effOverrideSink(w.id) === null).map((w) => ({ id: w.id, name: w.name }));
+    const sinkOpts = active.filter((w) => w.id !== S.whAddDonor).map((w) => ({ id: w.id, name: w.name }));
+
+    const rows = filtered.map((w) => {
+      const sid = effOverrideSink(w.id);
+      const sName = sid ? (active.find((x) => x.id === sid)?.name ?? sid) : null;
+      const editing = S.whEditRoute === w.id;
+      const dest = editing
+        ? `<div class="flex items-center gap-2">${searchSelect("routeEdit_" + w.id, active.filter((x) => x.id !== w.id).map((x) => ({ id: x.id, name: x.name })), sid ?? "", `route-edit:${w.id}`)}<button data-act="route-edit-cancel" class="text-xs text-muted hover:text-primary px-1">✕</button></div>`
+        : `<div class="flex items-center gap-2 group"><div><div class="text-sm text-primary">${esc(sName)}</div><div class="text-xs text-muted font-mono">${sid}</div></div><button data-act="route-edit-start" data-id="${w.id}" class="opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-accent" title="Change destination"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828A2 2 0 0110 16.414H8v-2a2 2 0 01.586-1.414z"/></svg></button>${pIds.has(w.id) ? pendingBadge() : ""}</div>`;
+      return `<tr class="border-b border-border">
+        <td class="py-3 pr-4"><div class="font-medium text-primary">${esc(w.name)}</div><div class="text-xs text-muted font-mono mt-0.5">${w.id} · ${esc(w.city)}</div></td>
+        <td class="py-3 text-center"><svg class="w-4 h-4 inline text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></td>
+        <td class="py-3 pr-4">${dest}</td>
+        <td class="py-3 text-center">${toggle(true, `route-off:${w.id}`, false)}</td>
+      </tr>`;
+    }).join("");
+
+    return `<div>
+      <div class="flex gap-3 bg-teal-900/15 border border-teal-800/30 rounded-xl px-4 py-3 mb-4">
+        <svg class="w-4 h-4 text-teal-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+        <p class="text-xs text-muted leading-relaxed">This list shows only donor warehouses with an active Route Pair Override. All other donors route to the <strong class="text-primary">${esc(sinkName)}</strong> by default. Use <span class="text-accent font-medium">+ Add override</span> or the CSV upload to create new overrides.</p>
+      </div>
+      ${csvPanel("Route Pair Overrides Bulk Upload", ["donor_id", "sink_id", "override_active"])}
+      <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <div class="relative flex-1 min-w-[160px]"><span class="absolute left-3 top-1/2 -translate-y-1/2">${ICON.search}</span><input data-input="whRouteSrcQ" value="${esc(srcQ)}" placeholder="Search source..." class="w-full bg-row border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors" /></div>
+        <div class="relative flex-1 min-w-[160px]"><span class="absolute left-3 top-1/2 -translate-y-1/2">${ICON.search}</span><input data-input="whRouteDstQ" value="${esc(dstQ)}" placeholder="Search destination..." class="w-full bg-row border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors" /></div>
+        <button data-act="wh-toggle-add" class="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors whitespace-nowrap">${S.whShowAdd ? "Cancel" : "+ Add override"}</button>
+        <span class="text-xs text-muted-dark whitespace-nowrap">${filtered.length} override${filtered.length === 1 ? "" : "s"}</span>
+      </div>
+      ${S.whShowAdd ? `<div class="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+        <div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">Donor</p>${searchSelect("addDonor", donorOpts, S.whAddDonor, "wh-add-donor", { placeholder: "Pick donor…", searchPlaceholder: "Search donor…" })}</div>
+        <svg class="w-4 h-4 text-muted mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">Sink</p>${searchSelect("addSink", sinkOpts, S.whAddSink, "wh-add-sink", { placeholder: "Pick sink…", searchPlaceholder: "Search sink…" })}</div>
+        <button data-act="wh-add-commit" ${!S.whAddDonor || !S.whAddSink ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add override</button>
+      </div>` : ""}
+      <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-muted uppercase tracking-wider border-b border-border">
+        <th class="text-left pb-2 font-medium">Source (Donor)</th><th class="text-center pb-2 font-medium w-6"></th><th class="text-left pb-2 font-medium">Destination (Sink)</th><th class="text-center pb-2 font-medium">Override</th>
+      </tr></thead><tbody>${rows || `<tr><td colspan="4" class="text-center text-muted py-10 text-sm">${withOverride.length === 0 ? "No route pair overrides yet. Use + Add override or the CSV upload above." : "No overrides match the current search."}</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
+
+  /* ═══════════════════════ THRESHOLDS PAGE ═══════════════════════ */
+  function effGlobalThresh() {
+    const o = Object.assign({}, thresholdsGlobal);
+    S.pending.filter((c) => c.module === "transfer_thresholds" && c.entity === "global_threshold").forEach((c) => { o[c.payload.field] = c.payload.value; });
+    return o;
+  }
+  function pendingGlobalThreshFields() { return new Set(S.pending.filter((c) => c.entity === "global_threshold").map((c) => c.payload.field)); }
+  function effCatThresh(catId) {
+    const base = categoryThresholds.find((c) => c.categoryId === catId) || null;
+    const o = base ? Object.assign({}, base) : null;
+    const clear = S.pending.find((c) => c.entity === "category_threshold_clear" && c.targetId === catId);
+    if (clear) return null;
+    const patches = S.pending.filter((c) => c.entity === "category_threshold" && c.payload.categoryId === catId);
+    if (patches.length && !o) return patches.reduce((a, c) => { a[c.payload.field] = c.payload.value; return a; }, {});
+    if (patches.length && o) { patches.forEach((c) => { o[c.payload.field] = c.payload.value; }); }
+    return o;
+  }
+  function pendingCatIds() { const s = new Set(); S.pending.forEach((c) => { if (c.entity === "category_threshold") s.add(c.payload.categoryId); if (c.entity === "category_threshold_clear") s.add(c.targetId); }); return s; }
+  function effBrandThresh(brandId) {
+    const base = brandThresholds.find((b) => b.brandId === brandId) || null;
+    const clear = S.pending.find((c) => c.entity === "brand_threshold_clear" && c.targetId === brandId);
+    if (clear) return null;
+    const o = base ? Object.assign({}, base) : {};
+    const patches = S.pending.filter((c) => c.entity === "brand_threshold" && c.payload.brandId === brandId);
+    if (!base && !patches.length) return null;
+    patches.forEach((c) => { o[c.payload.field] = c.payload.value; });
+    return o;
+  }
+  function pendingBrandThreshIds() { const s = new Set(); S.pending.forEach((c) => { if (c.entity === "brand_threshold") s.add(c.payload.brandId); if (c.entity === "brand_threshold_clear") s.add(c.targetId); }); return s; }
+
+  function pageThresholds() {
+    const tabs = [{ key: "global", label: "Global Default" }, { key: "category", label: "Category Overrides" }, { key: "brand", label: "Brand Overrides" }];
+    let body = "";
+    if (S.thTab === "global") body = thGlobal();
+    else if (S.thTab === "category") body = thCategory();
+    else body = thBrand();
+    return `<div class="p-8">
+      <div class="mb-6"><h1 class="text-2xl font-semibold text-primary">Transfer Thresholds</h1><p class="text-muted text-sm mt-1">Minimum viable load — financial circuit breaker for liquidation transfers</p></div>
+      ${tabBar(tabs, S.thTab, "thTab")}
+      <div class="mt-6">${body}</div>
+    </div>`;
+  }
+
+  function thresholdRow(icon, label, minKey, maxKey, minVal, maxVal, opts, pFields) {
+    opts = opts || {};
+    const configured = minVal !== null || maxVal !== null;
+    const pend = pFields.has(minKey) || pFields.has(maxKey);
+    return `<div class="bg-card border border-border rounded-xl p-4 mb-3"><div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 w-40 shrink-0"><svg class="w-4 h-4 text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${icon}"/></svg><span class="text-sm font-medium text-primary">${label}</span></div>
+      <div class="flex items-center gap-2 flex-1">
+        <span class="text-xs text-muted-dark uppercase tracking-wider">MIN</span>${inlineEdit("g_" + minKey, minVal, "gthresh:" + minKey, opts)}
+        <span class="text-muted-dark">—</span>
+        <span class="text-xs text-muted-dark uppercase tracking-wider">MAX</span>${inlineEdit("g_" + maxKey, maxVal, "gthresh:" + maxKey, opts)}
+      </div>
+      <div class="shrink-0 flex items-center gap-1.5">${configured ? `<span class="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30">Configured</span>` : `<span class="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border">Not set</span>`}${pend ? pendingBadge() : ""}</div>
+    </div></div>`;
+  }
+
+  function thGlobal() {
+    const g = effGlobalThresh();
+    const pf = pendingGlobalThreshFields();
+    const tiers = [
+      { tier: "TIER 01", label: "Brand Override", desc: "Per-brand", active: false },
+      { tier: "TIER 02", label: "Category Override", desc: "Per-category", active: false },
+      { tier: "TIER 03", label: "Global Default", desc: "Network-wide", active: true },
+    ];
+    const tierRow = tiers.map((t, i) => `<div class="flex-1 rounded-lg p-3 border ${t.active ? "border-accent bg-accent/5" : "border-border bg-card"}"><div class="text-xs text-muted">${t.tier}</div><div class="text-sm font-medium ${t.active ? "text-accent" : "text-primary"}">${t.label}</div><div class="text-xs text-muted-dark">${t.desc}</div></div>${i < 2 ? `<svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>` : ""}`).join("");
+    return `<div>
+      <div class="flex items-center gap-2 mb-6">${tierRow}</div>
+      ${thresholdRow("M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", "COGS", "cogsMin", "cogsMax", g.cogsMin, g.cogsMax, { prefix: "₹" }, pf)}
+      ${thresholdRow("M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", "Units", "unitsMin", "unitsMax", g.unitsMin, g.unitsMax, { suffix: " units" }, pf)}
+      ${thresholdRow("M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3", "Weight", "weightMin", "weightMax", g.weightMin, g.weightMax, { suffix: " kg" }, pf)}
+      ${g.updateDt ? `<p class="text-xs text-muted-dark mt-3">Last updated: ${g.updateDt}</p>` : ""}
+    </div>`;
+  }
+
+  function overrideThreshTable(kind, visibleList, pIds, addOpts) {
+    // kind: 'cat' or 'brand'
+    const isCat = kind === "cat";
+    const rows = visibleList.map((item) => {
+      const ov = item.override;
+      const has = ov && (ov.cogsMin != null || ov.cogsMax != null || ov.unitsMin != null || ov.unitsMax != null || ov.weightMin != null || ov.weightMax != null);
+      const idPrefix = isCat ? "c_" : "b_";
+      const act = isCat ? "cthresh" : "bthresh";
+      const nameCell = isCat
+        ? `<div class="font-medium text-primary">${esc(item.name)}</div><div class="text-xs text-muted-dark font-mono">${item.id}</div>`
+        : `<div class="font-medium text-primary">${esc(item.name)}</div><div class="text-xs text-muted-dark mt-0.5 font-mono">${item.categoryId}</div><div class="text-xs text-muted font-mono">${item.id}</div>`;
+      const statusLabel = has ? (isCat ? "Category Override" : "Brand Override") : "Using Global";
+      return `<tr class="border-b border-border">
+        <td class="py-3 pr-4">${nameCell}</td>
+        <td class="py-3 text-center">${inlineEdit(idPrefix + item.id + "_cogsMin", ov?.cogsMin ?? null, `${act}:${item.id}:cogsMin`, { prefix: "₹" })}</td>
+        <td class="py-3 pr-4 text-center">${inlineEdit(idPrefix + item.id + "_cogsMax", ov?.cogsMax ?? null, `${act}:${item.id}:cogsMax`, { prefix: "₹" })}</td>
+        <td class="py-3 text-center">${inlineEdit(idPrefix + item.id + "_unitsMin", ov?.unitsMin ?? null, `${act}:${item.id}:unitsMin`, {})}</td>
+        <td class="py-3 pr-4 text-center">${inlineEdit(idPrefix + item.id + "_unitsMax", ov?.unitsMax ?? null, `${act}:${item.id}:unitsMax`, {})}</td>
+        <td class="py-3 text-center">${inlineEdit(idPrefix + item.id + "_weightMin", ov?.weightMin ?? null, `${act}:${item.id}:weightMin`, { suffix: " kg" })}</td>
+        <td class="py-3 pr-4 text-center">${inlineEdit(idPrefix + item.id + "_weightMax", ov?.weightMax ?? null, `${act}:${item.id}:weightMax`, { suffix: " kg" })}</td>
+        <td class="py-3 pr-4 text-center"><div class="flex items-center justify-center gap-1.5">${has ? `<span class="text-xs px-2 py-0.5 rounded-full bg-teal-900/20 text-teal-400 border border-teal-800/30 whitespace-nowrap">${statusLabel}</span>` : `<span class="text-xs px-2 py-0.5 rounded-full bg-row text-muted border border-border whitespace-nowrap">Using Global</span>`}${pIds.has(item.id) ? pendingBadge() : ""}</div></td>
+        <td class="py-3 text-center">${has ? `<button data-act="${isCat ? "cthresh-clear" : "bthresh-clear"}" data-id="${item.id}" title="Clear override" class="text-red-400 hover:text-red-300 transition-colors">${ICON.xmark}</button>` : ""}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead>
+      <tr class="text-xs text-muted uppercase tracking-wider border-b border-border"><th class="text-left pb-2 font-medium pr-4">${isCat ? "Category" : "Brand"}</th><th class="text-center pb-2 font-medium pr-4" colspan="2">COGS</th><th class="text-center pb-2 font-medium pr-4" colspan="2">Units</th><th class="text-center pb-2 font-medium pr-4" colspan="2">Weight</th><th class="text-center pb-2 font-medium pr-4">Status</th><th class="text-center pb-2 font-medium">Clear</th></tr>
+      <tr class="text-xs text-muted-dark border-b border-border"><th class="pb-2 pr-4"></th><th class="pb-2 font-normal text-center">Min</th><th class="pb-2 font-normal text-center pr-4">Max</th><th class="pb-2 font-normal text-center">Min</th><th class="pb-2 font-normal text-center pr-4">Max</th><th class="pb-2 font-normal text-center">Min</th><th class="pb-2 font-normal text-center pr-4">Max</th><th class="pb-2 pr-4"></th><th class="pb-2"></th></tr>
+      </thead><tbody>${rows || `<tr><td colspan="9" class="text-center text-muted py-12 text-sm">No ${isCat ? "category" : "brand"} overrides yet. Use + Add override to create one.</td></tr>`}</tbody></table></div>`;
+  }
+
+  function thCategory() {
+    const pIds = pendingCatIds();
+    const committed = new Set(categoryThresholds.filter((c) => c.cogsMin != null || c.cogsMax != null || c.unitsMin != null || c.unitsMax != null || c.weightMin != null || c.weightMax != null).map((c) => c.categoryId));
+    const visibleIds = new Set([...committed, ...pIds, ...S.thCatLocal]);
+    const visible = categories.filter((c) => visibleIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, override: effCatThresh(c.id) }));
+    const addable = categories.filter((c) => !visibleIds.has(c.id)).map((c) => ({ id: c.id, name: c.name }));
+    return `<div>
+      <div class="flex items-center justify-between mb-4"><span class="text-xs text-muted">${visible.length} categor${visible.length === 1 ? "y" : "ies"} with overrides</span><button data-act="th-cat-add-toggle" class="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors">${S.thCatShowAdd ? "Cancel" : "+ Add override"}</button></div>
+      ${S.thCatShowAdd ? `<div class="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3"><div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">Category</p>${searchSelect("thCatAdd", addable, S.thCatAdd, "th-cat-add-pick", { placeholder: "Pick category…", searchPlaceholder: "Search category…" })}</div><button data-act="th-cat-add-commit" ${!S.thCatAdd ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add override</button></div>` : ""}
+      ${overrideThreshTable("cat", visible, pIds)}
+    </div>`;
+  }
+
+  function thBrand() {
+    const pIds = pendingBrandThreshIds();
+    const committed = new Set(brandThresholds.filter((b) => b.cogsMin != null || b.cogsMax != null || b.unitsMin != null || b.unitsMax != null || b.weightMin != null || b.weightMax != null).map((b) => b.brandId));
+    const visibleIds = new Set([...committed, ...pIds, ...S.thBrandLocal]);
+    const catName = (cid) => categories.find((c) => c.id === cid)?.name ?? cid;
+    const visible = brands.filter((b) => visibleIds.has(b.id)).map((b) => ({ id: b.id, name: b.name, categoryId: b.categoryId, override: effBrandThresh(b.id) }));
+    const addable = brands.filter((b) => !visibleIds.has(b.id)).map((b) => ({ id: b.id, name: b.name }));
+    return `<div>
+      <div class="flex items-center justify-between mb-4"><span class="text-xs text-muted">${visible.length} brand${visible.length === 1 ? "" : "s"} with overrides</span><button data-act="th-brand-add-toggle" class="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors">${S.thBrandShowAdd ? "Cancel" : "+ Add override"}</button></div>
+      ${S.thBrandShowAdd ? `<div class="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3"><div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">Brand</p>${searchSelect("thBrandAdd", addable, S.thBrandAdd, "th-brand-add-pick", { placeholder: "Pick brand…", searchPlaceholder: "Search brand…" })}</div><button data-act="th-brand-add-commit" ${!S.thBrandAdd ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add override</button></div>` : ""}
+      ${overrideThreshTable("brand", visible, pIds)}
+    </div>`;
+  }
+  </script>
+  <script id="product">
+  /* ═══════════════════════ PRODUCT PAGE ═══════════════════════ */
+  function effProductConfig() {
+    const o = Object.assign({}, productConfig);
+    S.pending.filter((c) => c.entity === "global_product_config").forEach((c) => { o[c.payload.field] = c.payload.value; });
+    return o;
+  }
+  function pendingProdGlobalFields() { return new Set(S.pending.filter((c) => c.entity === "global_product_config").map((c) => c.payload.field)); }
+  function effBrand(b) {
+    const p = S.pending.find((c) => c.entity === "brand_shelf_life" && (c.payload.brandId === b.id || c.targetId === b.id));
+    if (p) return Object.assign({}, b, { shelfLifeOverridePct: p.payload.shelfLifeOverridePct ?? null, isActive: p.payload.isActive ?? false });
+    return b;
+  }
+  function effSku(s) {
+    const p = S.pending.find((c) => c.entity === "sku_config" && c.targetId === s.id);
+    if (p) return Object.assign({}, s, { shelfLifeOverridePct: p.payload.shelfLifeOverridePct ?? null, isIgnored: p.payload.isIgnored ?? false });
+    return s;
+  }
+  function effCondition(c) {
+    const p = S.pending.find((x) => x.entity === "inventory_condition" && x.targetId === c.conditionType);
+    if (p) return Object.assign({}, c, { isEnabled: p.payload.enabled });
+    return c;
+  }
+  function pendingBrandIds() { return new Set(S.pending.filter((c) => c.entity === "brand_shelf_life").map((c) => c.payload.brandId ?? c.targetId)); }
+  function pendingSkuIds() { return new Set(S.pending.filter((c) => c.entity === "sku_config").map((c) => c.targetId)); }
+  function pendingCondIds() { return new Set(S.pending.filter((c) => c.entity === "inventory_condition").map((c) => c.targetId)); }
+
+  function pageProduct() {
+    const cfg = effProductConfig();
+    const effBrands = brands.map(effBrand);
+    const effSkus = skus.map(effSku);
+    const brandOverrides = effBrands.filter((b) => b.isActive && b.shelfLifeOverridePct !== null).length;
+    const skuOverrides = effSkus.filter((s) => s.shelfLifeOverridePct !== null).length;
+    const ignored = effSkus.filter((s) => s.isIgnored).length;
+    const tabs = [
+      { key: "global", label: "Global Rules" },
+      { key: "brands", label: "Brand Overrides" },
+      { key: "skus", label: "SKU Configuration" },
+      { key: "conditions", label: "Inventory Conditions" },
+    ];
+    let body = "";
+    if (S.prTab === "global") body = prGlobal(cfg, effSkus);
+    else if (S.prTab === "brands") body = prBrands(effBrands, cfg);
+    else if (S.prTab === "skus") body = prSkus(effSkus, effBrands, cfg);
+    else body = prConditions();
+    return `<div class="p-8">
+      <div class="mb-6 flex items-start justify-between gap-6">
+        <div><h1 class="text-2xl font-semibold text-primary">Product Configuration</h1><p class="text-muted text-sm mt-1">Shelf life thresholds · Eligibility rules · SKU overrides · Inventory conditions</p></div>
+        <div class="flex items-start gap-8">
+          <div class="text-right"><p class="text-2xl font-semibold text-blue-400 leading-none">${brandOverrides}</p><p class="text-xs text-muted mt-1">Brand Overrides</p></div>
+          <div class="text-right"><p class="text-2xl font-semibold text-violet-400 leading-none">${skuOverrides}</p><p class="text-xs text-muted mt-1">SKU Overrides</p></div>
+          <div class="text-right"><p class="text-2xl font-semibold text-red-400 leading-none">${ignored}</p><p class="text-xs text-muted mt-1">Ignored SKUs</p></div>
+        </div>
+      </div>
+      ${tabBar(tabs, S.prTab, "prTab")}
+      <div class="mt-6">${body}</div>
+    </div>`;
+  }
+
+  function prGlobal(cfg, effSkus) {
+    const pf = pendingProdGlobalFields();
+    const stdCount = skus.filter((s) => s.type === "standard").length;
+    const opCount = skus.filter((s) => s.type === "op").length;
+    const tier = (num, badge, badgeCls, title, sub) => `<div class="bg-row border border-border rounded-lg p-4"><p class="text-[10px] font-mono text-muted tracking-wider mb-2">TIER ${num}</p><span class="inline-block text-xs font-medium ${badgeCls} px-2.5 py-1 rounded-md mb-2">${badge}</span><p class="text-sm text-primary font-medium">${title}</p><p class="text-xs text-muted italic mt-0.5">${sub}</p></div>`;
+    const arrow = `<svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`;
+    const eligRow = (title, badge, badgeCls, desc, field, enabled) => `<div class="bg-row/40 border border-border rounded-lg p-4 flex items-center gap-4">
+      <div class="flex-1"><div class="flex items-center gap-2 mb-1"><p class="text-sm text-primary font-semibold">${title}</p><span class="text-[10px] font-medium ${badgeCls} px-1.5 py-0.5 rounded">${badge}</span></div><p class="text-xs text-muted">${desc}</p></div>
+      <button class="text-xs text-primary bg-row border border-border hover:border-accent/40 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">Manage SKUs<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
+      <div class="flex items-center gap-2">${pf.has(field) ? pendingBadge() : ""}<span class="text-xs font-medium ${enabled ? "text-green-400" : "text-muted"}">${enabled ? "Enabled" : "Disabled"}</span>${toggle(enabled, "prod-global-bool:" + field, false)}</div></div>`;
+    return `<div class="space-y-4">
+      <div class="bg-card border border-border rounded-xl p-5">
+        <div class="flex items-center gap-2 mb-4"><svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path stroke-linecap="round" d="M6 8v2a2 2 0 002 2h8a2 2 0 002-2V8M12 12v4"/></svg><h3 class="text-sm font-semibold text-primary">Precedence Hierarchy</h3><span class="text-xs text-muted">Highest wins</span></div>
+        <div class="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-3">
+          ${tier("01", "SKU Override", "bg-violet-900/30 text-violet-400 border border-violet-800/30", "Per-SKU threshold", "Highest priority")}${arrow}${tier("02", "Brand Override", "bg-accent/15 text-accent border border-accent/30", "Per-brand threshold", "Falls back if SKU null")}${arrow}${tier("03", "Global Default", "bg-row text-muted border border-border", "System-wide baseline", "Lowest priority")}
+        </div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <div class="flex items-start justify-between mb-4"><div><h3 class="text-sm font-semibold text-primary">Global Shelf Life Threshold</h3><p class="text-xs text-muted mt-1">Default liquidation trigger — applied when no Brand or SKU override exists</p></div><span class="text-xs bg-row text-muted border border-border px-2.5 py-1 rounded-md whitespace-nowrap">System Default</span></div>
+        <div class="grid grid-cols-2 gap-6 mt-2">
+          <div class="bg-row/40 border border-border rounded-lg p-4 space-y-4"><p class="text-xs font-medium text-muted uppercase tracking-wider">Standard SKUs</p>
+            <div class="flex items-center justify-between"><p class="text-xs text-muted flex items-center gap-2">Min ${pf.has("standardShelfLifeMinPct") ? pendingBadge() : ""}</p>${inlineEdit("p_stdMin", cfg.standardShelfLifeMinPct, "prod-global:standardShelfLifeMinPct", { suffix: "%" })}</div>
+            <div class="flex items-center justify-between"><p class="text-xs text-muted flex items-center gap-2">Max ${pf.has("standardShelfLifePct") ? pendingBadge() : ""}</p>${inlineEdit("p_stdMax", cfg.standardShelfLifePct, "prod-global:standardShelfLifePct", { suffix: "%" })}</div>
+          </div>
+          <div class="bg-row/40 border border-border rounded-lg p-4 space-y-4"><p class="text-xs font-medium text-muted uppercase tracking-wider">OP SKUs</p>
+            <div class="flex items-center justify-between"><p class="text-xs text-muted flex items-center gap-2">Min ${pf.has("opShelfLifeMinPct") ? pendingBadge() : ""}</p>${inlineEdit("p_opMin", cfg.opShelfLifeMinPct, "prod-global:opShelfLifeMinPct", { suffix: "%" })}</div>
+            <div class="flex items-center justify-between"><p class="text-xs text-muted flex items-center gap-2">Max ${pf.has("opShelfLifePct") ? pendingBadge() : ""}</p>${inlineEdit("p_opMax", cfg.opShelfLifePct, "prod-global:opShelfLifePct", { suffix: "%" })}</div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-card border border-border rounded-xl p-5">
+        <h3 class="text-sm font-semibold text-primary">Asset Class Eligibility</h3><p class="text-xs text-muted mt-1 mb-4">Global switches to enable or disable entire inventory classes from liquidation</p>
+        <div class="space-y-3">
+          ${eligRow("Standard SKUs", stdCount + " SKUs", "bg-row border border-border text-muted", "Regular active inventory eligible for liquidation. Individual SKU overrides are still respected.", "standardEnabled", cfg.standardEnabled)}
+          ${eligRow("OP SKUs (Outdated Packaging)", opCount + " SKUs", "bg-amber-900/20 border border-amber-800/40 text-amber-400", "Inventory with outdated packaging. These are prioritised for liquidation when enabled.", "opEnabled", cfg.opEnabled)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function prBrands(effBrands, cfg) {
+    const pIds = pendingBrandIds();
+    const activeBrands = effBrands.filter((b) => b.isActive || pIds.has(b.id));
+    const inactiveOpts = effBrands.filter((b) => !b.isActive && !pIds.has(b.id)).map((b) => ({ id: b.id, name: b.name }));
+    const rows = activeBrands.map((b) => `<tr class="border-b border-border hover:bg-row/50 transition-colors">
+      <td class="px-4 py-3"><p class="font-medium text-primary">${esc(b.name)}</p><p class="text-xs text-muted font-mono">${b.id}</p></td>
+      <td class="px-4 py-3 text-sm text-muted font-mono">${b.categoryId}</td>
+      <td class="px-4 py-3">${inlineEdit("pb_" + b.id, b.shelfLifeOverridePct, "prod-brand-sl:" + b.id, { suffix: "%", placeholder: `Global (${cfg.standardShelfLifePct}%)` })}</td>
+      <td class="px-4 py-3"><div class="flex items-center gap-2">${toggle(b.isActive, "prod-brand-active:" + b.id, false)}<span class="text-xs bg-teal-900/30 text-teal-400 border border-teal-800/30 px-2 py-0.5 rounded-full">Brand Override</span>${pIds.has(b.id) ? pendingBadge() : ""}</div></td>
+    </tr>`).join("");
+    return `<div>
+      ${csvPanel("Brand Overrides Bulk Upload", ["brand_id", "shelf_life_pct", "active"])}
+      <div class="flex items-center justify-between gap-2 mb-4 flex-wrap"><span class="text-xs text-muted-dark whitespace-nowrap">${activeBrands.length} brand override${activeBrands.length === 1 ? "" : "s"}</span><button data-act="pr-brand-add-toggle" class="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors">${S.prBrandShowAdd ? "Cancel" : "+ Add override"}</button></div>
+      ${S.prBrandShowAdd ? `<div class="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3"><div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">Brand</p>${searchSelect("prBrandAdd", inactiveOpts, S.prBrandAdd, "pr-brand-add-pick", { placeholder: "Pick brand…", searchPlaceholder: "Search brand…" })}</div><button data-act="pr-brand-add-commit" ${!S.prBrandAdd ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add override</button></div>` : ""}
+      <div class="bg-card border border-border rounded-xl overflow-hidden"><table class="w-full text-sm"><thead><tr class="border-b border-border bg-row">${["Brand", "Category", "Shelf Life Override", "Status"].map((c) => `<th class="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">${c}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="4" class="px-4 py-12 text-center text-muted text-sm">No brand overrides yet. Use + Add override or the bulk CSV upload to create one.</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
+
+  function prSkus(effSkus, effBrands, cfg) {
+    const pIds = pendingSkuIds();
+    const sourceOf = (s) => {
+      if (s.shelfLifeOverridePct !== null) return "sku";
+      const bo = effBrands.find((b) => b.id === s.brandId);
+      if (bo?.isActive) return "brand";
+      return "global";
+    };
+    const withOverride = effSkus.filter((s) => sourceOf(s) === "sku");
+    const q = S.prSkuQ, ef = S.prSkuElig, tf = S.prSkuType;
+    const filtered = withOverride.filter((s) => {
+      if (q && ![s.name, s.id, s.brandName, s.categoryName].some((x) => x.toLowerCase().includes(q.toLowerCase()))) return false;
+      if (ef === "eligible" && s.isIgnored) return false;
+      if (ef === "ignored" && !s.isIgnored) return false;
+      if (tf === "standard" && s.type !== "standard") return false;
+      if (tf === "op" && s.type !== "op") return false;
+      return true;
+    });
+    const globalOpts = effSkus.filter((s) => sourceOf(s) !== "sku").map((s) => ({ id: s.id, name: s.name }));
+    const seg = (cur, opts, act) => `<div class="flex items-center rounded-lg border border-border overflow-hidden">${opts.map(([k, l]) => `<button data-act="${act}" data-val="${k}" class="px-3 py-2 text-xs font-medium transition-colors ${cur === k ? "bg-accent/10 text-accent" : "text-muted hover:text-primary"}">${l}</button>`).join("")}</div>`;
+    const rows = filtered.map((s) => {
+      const bo = effBrands.find((b) => b.id === s.brandId);
+      const ph = (bo?.isActive && bo.shelfLifeOverridePct ? bo.shelfLifeOverridePct : cfg.standardShelfLifePct) + "%";
+      return `<tr class="border-b border-border hover:bg-row/50 transition-colors">
+        <td class="px-4 py-3 max-w-[280px]"><p class="font-medium text-primary">${esc(s.name)}</p><p class="text-xs text-muted font-mono">${s.id}</p></td>
+        <td class="px-4 py-3"><p class="text-sm text-primary">${esc(s.brandName)}</p><p class="text-xs text-muted">${esc(s.categoryName)}</p></td>
+        <td class="px-4 py-3">${s.type === "op" ? `<span class="text-xs bg-amber-900/30 text-amber-400 border border-amber-800/30 px-2 py-0.5 rounded-full">OP</span>` : `<span class="text-xs bg-blue-900/30 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">Standard</span>`}</td>
+        <td class="px-4 py-3">${inlineEdit("ps_" + s.id, s.shelfLifeOverridePct, "prod-sku-sl:" + s.id, { suffix: "%", placeholder: ph })}</td>
+        <td class="px-4 py-3"><div class="flex items-center gap-1.5 flex-wrap"><span class="text-xs bg-violet-900/30 text-violet-400 border border-violet-800/30 px-2 py-0.5 rounded-full">SKU Override</span>${pIds.has(s.id) ? pendingBadge() : ""}</div></td>
+        <td class="px-4 py-3 text-sm text-muted whitespace-nowrap">${nf(s.stockUnits)} u</td>
+        <td class="px-4 py-3"><div class="flex items-center gap-2">${toggle(!s.isIgnored, "prod-sku-elig:" + s.id, false)}<span class="text-xs px-2 py-0.5 rounded-full ${!s.isIgnored ? "bg-green-900/30 text-green-400 border border-green-800/30" : "bg-red-900/30 text-red-400 border border-red-800/30"}">${s.isIgnored ? "Ignored" : "Eligible"}</span></div></td>
+      </tr>`;
+    }).join("");
+    return `<div>
+      ${csvPanel("SKU Configuration Bulk Upload", ["sku_id", "override_days", "ignored"])}
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <div class="relative flex-1 min-w-[200px]"><span class="absolute left-3 top-1/2 -translate-y-1/2">${ICON.search}</span><input data-input="prSkuQ" value="${esc(q)}" placeholder="Search SKU, name, brand, category..." class="w-full bg-row border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-primary placeholder:text-muted-dark focus:outline-none focus:border-accent transition-colors" /></div>
+        ${seg(ef, [["all", "All"], ["eligible", "Eligible"], ["ignored", "Ignored"]], "prSkuElig")}
+        ${seg(tf, [["all", "All Types"], ["standard", "Standard"], ["op", "OP"]], "prSkuType")}
+        <button data-act="pr-sku-add-toggle" class="px-3 py-2 text-xs font-medium bg-accent/10 text-accent border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors whitespace-nowrap">${S.prSkuShowAdd ? "Cancel" : "+ Add override"}</button>
+        <span class="text-xs text-muted-dark whitespace-nowrap">${filtered.length} / ${withOverride.length} overridden SKUs</span>
+      </div>
+      ${S.prSkuShowAdd ? `<div class="bg-card border border-accent/30 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3"><div><p class="text-[10px] uppercase tracking-wider text-muted mb-1">SKU</p>${searchSelect("prSkuAdd", globalOpts, S.prSkuAdd, "pr-sku-add-pick", { placeholder: "Pick SKU…", searchPlaceholder: "Search SKU…" })}</div><button data-act="pr-sku-add-commit" ${!S.prSkuAdd ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Add override</button></div>` : ""}
+      <div class="bg-card border border-border rounded-xl overflow-hidden"><table class="w-full text-sm"><thead><tr class="border-b border-border bg-row">${["SKU", "Brand / Category", "Type", "Shelf Life", "Source", "Stock", "Eligibility"].map((c) => `<th class="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">${c}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="7" class="px-4 py-12 text-center text-muted text-sm">${withOverride.length === 0 ? "No SKU overrides yet. Use + Add override or the bulk CSV upload above." : "No SKUs match the current filters."}</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
+
+  const CONDITION_META = {
+    good:    { label: "Good",    description: "Saleable inventory in full sellable condition.", icon: `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`, dot: "bg-green-400" },
+    damaged: { label: "Damaged", description: "Inventory with packaging or product damage — still movable.", icon: `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`, dot: "bg-amber-400" },
+    expired: { label: "Expired", description: "Past expiry date. Requires special handling / disposal.", icon: `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`, dot: "bg-red-400" },
+  };
+
+  function prConditions() {
+    const pIds = pendingCondIds();
+    const conds = inventoryConditions.map(effCondition);
+    const enabledCount = conds.filter((c) => c.isEnabled).length;
+    const cards = conds.map((c) => {
+      const m = CONDITION_META[c.conditionType];
+      return `<div class="bg-card border border-border rounded-xl p-5 flex items-center gap-4">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${c.isEnabled ? "bg-accent/15 text-accent" : "bg-row text-muted"}">${m.icon}</div>
+        <div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-0.5"><span class="text-sm font-semibold text-primary">${m.label}</span>${!c.isEnabled ? `<span class="text-xs font-medium bg-red-900/30 text-red-400 border border-red-800/30 px-2 py-0.5 rounded-md">Out of Scope</span>` : ""}</div><p class="text-sm text-muted">${m.description}</p></div>
+        <div class="flex items-center gap-2 shrink-0">${pIds.has(c.conditionType) ? pendingBadge() : ""}<span class="text-xs font-medium ${c.isEnabled ? "text-green-400" : "text-muted"}">${c.isEnabled ? "Enabled" : "Disabled"}</span>${toggle(c.isEnabled, "prod-cond:" + c.conditionType, false)}</div>
+      </div>`;
+    }).join("");
+    const dots = conds.map((c) => { const m = CONDITION_META[c.conditionType]; return `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full ${c.isEnabled ? m.dot : "bg-[#2d3748]"}"></span><span class="text-xs ${c.isEnabled ? "text-primary" : "text-muted"}">${m.label}</span></div>`; }).join("");
+    return `<div class="space-y-4">
+      <div class="bg-card border border-border rounded-xl p-4 flex gap-3 border-l-2 border-l-accent"><svg class="w-4 h-4 text-accent mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg><p class="text-sm text-muted"><span class="text-accent font-semibold">Inventory Condition Rules</span> define which physical states of inventory are planned for movement in this liquidation run. Enable a condition, then select the allowed disposition methods for it.</p></div>
+      <div class="space-y-3">${cards}</div>
+      <div class="bg-card border border-border rounded-xl flex items-stretch overflow-hidden"><div class="px-5 py-3 flex items-center"><span class="text-sm text-muted"><span class="text-primary font-semibold">${enabledCount}</span> of 3 conditions in scope for this run</span></div><div class="w-px bg-border"></div><div class="px-5 py-3 flex items-center gap-4">${dots}</div></div>
+    </div>`;
+  }
+  </script>
+  <script id="approval">
+  /* ═══════════════════════ APPROVAL PAGE ═══════════════════════ */
+  function orderTypeBadge(t) {
+    if (t === "wh_transfer") return `<span class="text-xs bg-blue-900/30 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">WH Transfer</span>`;
+    if (t === "b2b") return `<span class="text-xs bg-violet-900/30 text-violet-400 border border-violet-800/30 px-2 py-0.5 rounded-full">B2B Order</span>`;
+    return `<span class="text-xs bg-orange-900/30 text-orange-400 border border-orange-800/30 px-2 py-0.5 rounded-full">Liq. Stock</span>`;
+  }
+  function statusBadge(s) {
+    if (s === "pending") return `<span class="text-xs bg-amber-900/30 text-amber-400 border border-amber-700/30 px-2 py-0.5 rounded-full">Pending</span>`;
+    if (s === "in_transit") return `<span class="text-xs bg-blue-900/30 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">In Transit</span>`;
+    return `<span class="text-xs bg-row text-muted border border-border px-2 py-0.5 rounded-full">Cancelled</span>`;
+  }
+
+  function pageApproval() {
+    const tabs = ["Pending Approval", "Manage Transactions"];
+    const tabbar = `<div class="flex items-center gap-1 border-b border-border mb-6">${tabs.map((t) => `<button data-act="apTab" data-val="${esc(t)}" class="px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${S.apTab === t ? "border-accent text-accent" : "border-transparent text-muted hover:text-primary"}">${t}</button>`).join("")}</div>`;
+    const body = S.apTab === "Pending Approval" ? apPending() : apManage();
+    return `<div class="p-8"><div class="mb-6"><h1 class="text-2xl font-semibold text-primary">Transfer Approval</h1><p class="text-muted text-sm mt-1">Review engine-generated batches · Authorize or reject · Manage in-flight orders</p></div>${tabbar}${body}</div>`;
+  }
+
+  function apPending() {
+    const batch = batches.find((b) => b.status === "pending_approval");
+    if (!batch || S.apReject) return `<div class="rounded-xl border border-dashed border-border p-12 text-center"><p class="text-muted">No batches pending approval.</p></div>`;
+    const bOrders = orders.filter((o) => o.batchId === batch.id);
+    const bLines = lineItems.filter((li) => bOrders.some((o) => o.id === li.orderId));
+    const totalOrders = bOrders.length;
+    const totalSkus = new Set(bLines.map((li) => li.skuId)).size;
+    const totalUnits = bLines.reduce((s, li) => s + li.units, 0);
+    const totalCogs = bOrders.reduce((s, o) => s + o.cogs, 0);
+    const totalWeight = bOrders.reduce((s, o) => s + o.weight, 0);
+    const stats = [
+      { label: "Total Orders", value: totalOrders },
+      { label: "Total SKUs", value: totalSkus },
+      { label: "Total Units", value: totalUnits },
+      { label: "Total COGS", value: `₹${(totalCogs / 1000).toFixed(0)}K` },
+      { label: "Total Weight", value: `${totalWeight} kg` },
+    ].map((s) => `<div class="bg-row rounded-lg p-3 text-center"><p class="text-xs text-muted uppercase tracking-wide">${s.label}</p><p class="text-base font-semibold text-primary mt-1">${s.value}</p></div>`).join("");
+    const isVerified = S.apAuth === batch.id;
+
+    const orderCards = bOrders.map((order) => {
+      const expanded = !!S.apExpanded[order.id];
+      const lines = lineItems.filter((li) => li.orderId === order.id);
+      let table = "";
+      if (expanded) {
+        const rows = lines.map((li) => {
+          const ed = li.expiryDate ? new Date(li.expiryDate) : null;
+          const isExpired = ed !== null && ed < new Date("2024-08-01");
+          let expiryCell;
+          if (ed === null) expiryCell = `<span class="text-muted">No expiry</span>`;
+          else if (isExpired) expiryCell = `<span class="text-red-400 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>${fmtDate(li.expiryDate)}</span>`;
+          else expiryCell = `<span class="text-primary">${fmtDate(li.expiryDate)}</span>`;
+          return `<tr class="border-b border-border/50"><td class="py-2 pr-4 font-mono text-muted">${li.skuId}</td><td class="py-2 pr-4 text-primary">${esc(li.skuName)}</td><td class="py-2 pr-4 text-primary">${li.units}</td><td class="py-2 pr-4 text-primary">₹${nf(li.cogs)}</td><td class="py-2 pr-4">${expiryCell}</td></tr>`;
+        }).join("");
+        table = `<div class="bg-row border-t border-border p-4"><table class="w-full text-xs"><thead><tr class="border-b border-border">${["SKU ID", "Name", "Units", "COGS (₹)", "Expiry"].map((c) => `<th class="text-left text-muted font-medium pb-2 pr-4">${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      }
+      return `<div class="bg-card border border-border rounded-xl mb-2 overflow-hidden">
+        <div class="flex items-center gap-3 p-4 cursor-pointer" data-act="ap-expand" data-id="${order.id}">
+          <span class="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0"></span>
+          <span class="text-sm font-mono font-medium text-primary">${order.id}</span>${orderTypeBadge(order.type)}
+          <span class="text-xs text-muted">${esc(order.sourceName)} → ${esc(order.destinationName)}</span>
+          <span class="flex-1"></span>
+          <span class="text-xs text-muted gap-3 flex items-center"><span>${order.units} units</span><span>₹${(order.cogs / 1000).toFixed(1)}K</span><span>${order.weight} kg</span></span>
+          <svg class="w-4 h-4 text-muted transition-transform ${expanded ? "rotate-90" : ""}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </div>${table}</div>`;
+    }).join("");
+
+    let authGate;
+    if (S.apCommitted) {
+      authGate = `<div class="text-center"><div class="w-12 h-12 rounded-full bg-green-900/30 border border-green-800/30 flex items-center justify-center mx-auto mb-3"><svg class="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div><p class="text-primary font-semibold mb-3">Batch Committed</p><div class="flex flex-col gap-1">${bOrders.map((o) => `<p class="text-xs font-mono text-muted">${o.id}</p>`).join("")}</div></div>`;
+    } else {
+      authGate = `<p class="text-base font-semibold text-primary flex items-center gap-2">🔑 Authorization Gate</p>
+        <p class="text-sm text-muted mt-1 mb-4">Enter the Liquidation Identifier to authorize this batch.</p>
+        <input data-input="apAuth" value="${esc(S.apAuth)}" type="text" placeholder="e.g. LIQ-2024-0047" class="w-full bg-row border border-border rounded-lg px-3 py-2 text-sm font-mono text-primary focus:outline-none focus:border-accent" />
+        ${S.apAuth !== "" ? `<p class="mt-2 text-xs ${isVerified ? "text-green-400" : "text-red-400"}">${isVerified ? "✓ Batch ID verified" : "✗ ID does not match pending batch"}</p>` : ""}
+        <button data-act="ap-authorize" ${!isVerified ? "disabled" : ""} class="mt-4 w-full bg-accent text-white rounded-lg py-2 text-sm font-medium transition-opacity ${!isVerified ? "opacity-40 cursor-not-allowed" : "hover:opacity-90"}">Authorize Batch</button>
+        <button data-act="ap-reject" class="mt-2 w-full border border-border text-red-400 hover:border-red-700 rounded-lg py-2 text-sm transition-colors">Reject Batch</button>
+        <div class="mt-4 bg-amber-900/10 border border-amber-800/20 rounded-lg p-3 text-xs text-amber-400/80">Committing will mark all transfer orders as active.</div>`;
+    }
+
+    return `<div>
+      <div class="flex items-center gap-3 bg-amber-900/20 border border-amber-700/30 rounded-xl p-3 mb-4"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"></span><span class="text-sm text-amber-300 font-medium">Test Mode — Engine Simulation</span><span class="ml-auto text-xs border border-amber-600/50 text-amber-400 px-2 py-0.5 rounded-full">TEST</span></div>
+      <div class="bg-card border border-border rounded-xl p-5 mb-4"><div class="flex items-center gap-3 mb-2"><span class="font-mono text-xl font-bold text-primary">${batch.id}</span><span class="text-xs bg-amber-900/30 text-amber-400 border border-amber-700/30 px-2 py-0.5 rounded-full">Awaiting Approval</span></div><p class="text-xs text-muted">Generated ${fmtDate(batch.generatedAt)} &middot; Sink: ${esc(batch.masterSinkName)}</p></div>
+      <div class="grid grid-cols-5 gap-2 mb-4">${stats}</div>
+      <div class="flex gap-4"><div class="flex-1">${orderCards}</div><div class="w-72 sticky top-8 self-start"><div class="bg-card border border-border rounded-xl p-5">${authGate}</div></div></div>
+    </div>`;
+  }
+
+  function apManage() {
+    const q = S.txnSearch, f = S.txnStatus;
+    const filtered = orders.filter((o) => {
+      if (q && !o.id.toLowerCase().includes(q.toLowerCase()) && !o.batchId.toLowerCase().includes(q.toLowerCase())) return false;
+      if (f !== "all" && o.status !== f) return false;
+      return true;
+    });
+    const pendingCount = orders.filter((o) => o.status === "pending").length;
+    const inTransit = orders.filter((o) => o.status === "in_transit").length;
+    const pillBase = "text-xs px-3 py-1.5 rounded-full border cursor-pointer transition-colors select-none";
+    const pillA = "bg-accent/20 border-accent/40 text-accent";
+    const pillI = "bg-row border-border text-muted hover:text-primary";
+    const filters = [["all", "All"], ["pending", "Pending"], ["in_transit", "In Transit"], ["cancelled", "Cancelled"]];
+    const rows = filtered.map((o) => {
+      let action;
+      if (o.status === "pending") action = `<button data-act="txn-cancel" data-id="${o.id}" class="text-red-400 hover:text-red-300 transition-colors text-lg leading-none" title="Cancel">×</button>`;
+      else if (o.status === "in_transit") action = `<svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>`;
+      else action = `<span class="text-muted">—</span>`;
+      return `<tr class="border-b border-border hover:bg-row/50 transition-colors"><td class="px-4 py-3 font-mono text-xs text-primary">${o.id}</td><td class="px-4 py-3 font-mono text-xs text-muted">${o.batchId}</td><td class="px-4 py-3">${orderTypeBadge(o.type)}</td><td class="px-4 py-3 text-xs text-muted">${esc(o.sourceName)} → ${esc(o.destinationName)}</td><td class="px-4 py-3 text-xs text-muted">${o.units} SKUs · ${o.units} units · ₹${(o.cogs / 1000).toFixed(1)}K</td><td class="px-4 py-3">${statusBadge(o.status)}</td><td class="px-4 py-3">${action}</td></tr>`;
+    }).join("");
+    return `<div>
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-card border border-border rounded-xl p-4"><p class="text-sm font-medium text-primary mb-3">Cancel by Batch ID</p><input data-input="txnBatchId" value="${esc(S.txnBatchId || "")}" type="text" placeholder="e.g. BATCH-2024-001" class="bg-row border border-border rounded-lg px-3 py-2 text-sm font-mono text-primary w-full mb-2 focus:outline-none focus:border-accent" /><button data-act="txn-cancel-batch" ${!S.txnBatchId ? "disabled" : ""} class="bg-red-900/30 border border-red-800/30 text-red-400 text-sm rounded-lg py-1.5 px-3 hover:bg-red-900/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Cancel All</button></div>
+        <div class="bg-card border border-border rounded-xl p-4"><p class="text-sm font-medium text-primary mb-3">Cancel by Source Warehouse</p><input data-input="txnBulkBatch" value="${esc(S.txnBulkBatch || "")}" type="text" placeholder="Batch ID (optional)" class="bg-row border border-border rounded-lg px-3 py-2 text-sm font-mono text-primary w-full mb-2 focus:outline-none focus:border-accent" /><p class="text-xs text-muted mb-2">Batch ID is optional</p><input data-input="txnSource" value="${esc(S.txnSource || "")}" type="text" placeholder="Source warehouse name" class="bg-row border border-border rounded-lg px-3 py-2 text-sm text-primary w-full mb-2 focus:outline-none focus:border-accent" /><button data-act="txn-cancel-source" ${!S.txnSource ? "disabled" : ""} class="bg-red-900/30 border border-red-800/30 text-red-400 text-sm rounded-lg py-1.5 px-3 hover:bg-red-900/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Cancel All</button></div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <input data-input="txnSearch" value="${esc(q)}" type="text" placeholder="Search by TXN ID or Batch…" class="text-sm bg-row border border-border rounded-lg px-3 py-2 text-primary placeholder-muted focus:outline-none focus:border-accent w-56" />
+        <div class="flex items-center gap-1">${filters.map(([k, l]) => `<button data-act="txnStatus" data-val="${k}" class="${pillBase} ${f === k ? pillA : pillI}">${l}</button>`).join("")}</div>
+        <div class="ml-auto flex items-center gap-2"><span class="text-xs bg-amber-900/20 text-amber-400 border border-amber-700/30 px-2 py-0.5 rounded-full">${pendingCount} pending</span><span class="text-xs bg-blue-900/20 text-blue-400 border border-blue-800/30 px-2 py-0.5 rounded-full">${inTransit} in transit</span></div>
+      </div>
+      <div class="bg-card border border-border rounded-xl overflow-hidden"><table class="w-full text-sm"><thead><tr class="border-b border-border bg-row">${["TXN ID", "Batch ID", "Type", "Source → Dest", "SKUs / Units / COGS", "Status", "Action"].map((c) => `<th class="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">${c}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="7" class="px-4 py-12 text-center text-muted text-sm">No transactions match the current filters.</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
+  </script>
+  <script id="audit">
+  /* ═══════════════════════ AUDIT PAGE ═══════════════════════ */
+  const MODULE_LABELS = { warehouse_setup: "Warehouse Setup", product_config: "Product Config", transfer_thresholds: "Transfer Thresholds", transfer_approval: "Transfer Approval", draft: "Draft" };
+  function moduleBadge(m) {
+    const map = {
+      warehouse_setup: "bg-teal-900/30 text-teal-400 border-teal-800/30",
+      product_config: "bg-violet-900/30 text-violet-400 border-violet-800/30",
+      transfer_thresholds: "bg-cyan-900/30 text-cyan-400 border-cyan-800/30",
+      transfer_approval: "bg-orange-900/30 text-orange-400 border-orange-800/30",
+      draft: "bg-green-900/30 text-green-400 border-green-800/30",
+    };
+    const cls = map[m] ?? "bg-row text-muted border-border";
+    return `<span class="text-xs px-2 py-0.5 rounded-full border font-medium ${cls}">${MODULE_LABELS[m] ?? m}</span>`;
+  }
+  function committedActionDisplay(action, afterJson) {
+    let after = {}; try { after = JSON.parse(afterJson || "{}"); } catch (e) {}
+    const M = {
+      configuration_committed: { label: "Committed", color: "text-green-400", dot: "bg-green-400 shadow-[0_0_6px_2px_rgba(74,222,128,0.5)]" },
+      master_sink_updated: { label: "Sink Updated", color: "text-teal-400", dot: "bg-teal-400" },
+      master_sink_cleared: { label: "Sink Cleared", color: "text-muted", dot: "bg-border" },
+      route_pair_override_set: { label: "Route Override", color: "text-teal-400", dot: "bg-teal-400" },
+      route_pair_override_cleared: { label: "Route Cleared", color: "text-muted", dot: "bg-border" },
+      global_threshold_updated: { label: "Global Updated", color: "text-amber-400", dot: "bg-amber-400" },
+      category_threshold_updated: { label: "Category Override", color: "text-amber-400", dot: "bg-amber-400" },
+      category_threshold_cleared: { label: "Threshold Cleared", color: "text-muted", dot: "bg-border" },
+      brand_threshold_updated: { label: "Brand Override", color: "text-blue-400", dot: "bg-blue-400" },
+      brand_threshold_cleared: { label: "Threshold Cleared", color: "text-muted", dot: "bg-border" },
+      product_config_updated: { label: "Config Updated", color: "text-violet-400", dot: "bg-violet-400" },
+      brand_shelf_life_updated: { label: "Brand Override", color: "text-blue-400", dot: "bg-blue-400" },
+      sku_ignored: { label: "SKU Ignored", color: "text-red-400", dot: "bg-red-400" },
+      sku_unignored: { label: "SKU Unignored", color: "text-green-400", dot: "bg-green-400" },
+      sku_shelf_life_override_set: { label: "SKU Override", color: "text-violet-400", dot: "bg-violet-400" },
+      inventory_condition_updated: { label: "Condition Updated", color: "text-teal-400", dot: "bg-teal-400" },
+      batch_reviewed: { label: "Batch Reviewed", color: "text-orange-400", dot: "bg-orange-400" },
+    };
+    if (action === "donor_participation_updated") return after.isParticipating === false ? { label: "Donor Disabled", color: "text-red-400", dot: "bg-red-400" } : { label: "Donor Enabled", color: "text-teal-400", dot: "bg-teal-400" };
+    return M[action] ?? { label: action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), color: "text-muted", dot: "bg-border" };
+  }
+  function pendingActionDisplay(c) {
+    switch (c.entity) {
+      case "donor_participation": return c.payload.isParticipating === false ? { label: "Donor Disabled", color: "text-red-400", dot: "bg-red-400" } : { label: "Donor Enabled", color: "text-teal-400", dot: "bg-teal-400" };
+      case "master_sink": return c.op === "set" ? { label: "Sink Updated", color: "text-teal-400", dot: "bg-teal-400" } : { label: "Sink Cleared", color: "text-muted", dot: "bg-border" };
+      case "pair_override": return c.op === "set" ? { label: "Route Override", color: "text-teal-400", dot: "bg-teal-400" } : { label: "Route Cleared", color: "text-muted", dot: "bg-border" };
+      case "global_threshold": return { label: "Global Updated", color: "text-amber-400", dot: "bg-amber-400" };
+      case "category_threshold": return { label: "Category Override", color: "text-amber-400", dot: "bg-amber-400" };
+      case "category_threshold_clear": return { label: "Threshold Cleared", color: "text-muted", dot: "bg-border" };
+      case "brand_threshold": return { label: "Brand Override", color: "text-blue-400", dot: "bg-blue-400" };
+      case "brand_threshold_clear": return { label: "Threshold Cleared", color: "text-muted", dot: "bg-border" };
+      case "global_product_config": return { label: "Config Updated", color: "text-violet-400", dot: "bg-violet-400" };
+      case "brand_shelf_life": return { label: "Brand Override", color: "text-blue-400", dot: "bg-blue-400" };
+      case "sku_config": if (c.payload.isIgnored === true) return { label: "SKU Ignored", color: "text-red-400", dot: "bg-red-400" }; if (c.payload.isIgnored === false) return { label: "SKU Unignored", color: "text-green-400", dot: "bg-green-400" }; return { label: "SKU Override", color: "text-violet-400", dot: "bg-violet-400" };
+      case "inventory_condition": return { label: "Condition Updated", color: "text-teal-400", dot: "bg-teal-400" };
+      default: return { label: c.entity.replace(/_/g, " "), color: "text-muted", dot: "bg-border" };
+    }
+  }
+  function pendingEntityDisplay(c) {
+    switch (c.entity) {
+      case "global_threshold": case "global_product_config": return "Global Default";
+      case "category_threshold": return c.payload.categoryName ?? c.payload.categoryId ?? c.targetId ?? "—";
+      case "brand_threshold": case "brand_shelf_life": { const name = c.payload.brandName; const id = c.payload.brandId ?? c.targetId; return name && id ? `${id} (${name})` : (id ?? "—"); }
+      default: return c.targetId ?? c.entity;
+    }
+  }
+  function pendingSummary(c) {
+    switch (c.entity) {
+      case "donor_participation": return `${c.payload.isParticipating ? "Enabled" : "Disabled"} donor for ${c.targetId}`;
+      case "master_sink": return c.op === "set" ? `Master sink → ${c.payload.warehouseId}` : "Master sink cleared";
+      case "pair_override": return c.op === "set" ? `Route override: ${c.targetId} → ${c.payload.sinkId}` : `Route cleared for ${c.targetId}`;
+      case "global_threshold": return `${c.payload.field} updated to ${c.payload.value}`;
+      case "category_threshold": return `${c.payload.field} set for ${c.payload.categoryName ?? c.payload.categoryId}`;
+      case "category_threshold_clear": return `Threshold cleared for ${c.targetId}`;
+      case "brand_threshold": return `${c.payload.field} set for ${c.payload.brandName ?? c.payload.brandId}`;
+      case "brand_threshold_clear": return `Threshold cleared for ${c.targetId}`;
+      case "global_product_config": return `${c.payload.field} updated to ${c.payload.value}`;
+      case "brand_shelf_life": return `Shelf life override for ${c.payload.brandName ?? c.payload.brandId}`;
+      case "sku_config": if (c.payload.isIgnored === true) return `${c.targetId} marked as ignored`; if (c.payload.isIgnored === false) return `${c.targetId} unignored`; return `${c.targetId} shelf life → ${c.payload.shelfLifeOverridePct}%`;
+      case "inventory_condition": return `Condition ${c.targetId} ${c.payload.enabled ? "enabled" : "disabled"}`;
+      default: return `${c.entity} ${c.op}`;
+    }
+  }
+  const AVATAR_COLORS = [
+    { bg: "bg-violet-900/40", border: "border-violet-700/40", text: "text-violet-300" },
+    { bg: "bg-teal-900/40", border: "border-teal-700/40", text: "text-teal-300" },
+    { bg: "bg-blue-900/40", border: "border-blue-700/40", text: "text-blue-300" },
+    { bg: "bg-orange-900/40", border: "border-orange-700/40", text: "text-orange-300" },
+    { bg: "bg-pink-900/40", border: "border-pink-700/40", text: "text-pink-300" },
+    { bg: "bg-green-900/40", border: "border-green-700/40", text: "text-green-300" },
+  ];
+  function userColor(uid) { let h = 0; for (let i = 0; i < uid.length; i++) h = (h + uid.charCodeAt(i)) % AVATAR_COLORS.length; return AVATAR_COLORS[h]; }
+  const initials = (uid) => uid.slice(0, 2).toUpperCase();
+
+  function pageAudit() {
+    const logs = S.auditLogs;
+    const commitCount = logs.filter((l) => l.action === "configuration_committed").length;
+    const configCount = logs.length - commitCount;
+    const uniqueUsers = Array.from(new Set(logs.map((l) => l.userId)));
+    const q = S.auSearch;
+    const filteredLogs = logs.filter((l) => {
+      if (q && !l.summary.toLowerCase().includes(q.toLowerCase()) && !l.entity.toLowerCase().includes(q.toLowerCase())) return false;
+      if (S.auModule !== "all" && l.module !== S.auModule) return false;
+      if (S.auAction === "commits" && l.action !== "configuration_committed") return false;
+      if (S.auAction === "csv" && !l.action.includes("csv")) return false;
+      if (S.auAction === "config" && l.action === "configuration_committed") return false;
+      if (S.auUser !== "all" && l.userId !== S.auUser) return false;
+      return true;
+    });
+    const filteredPending = S.pending.filter((c) => {
+      if (q) { const s = pendingSummary(c), e = pendingEntityDisplay(c); if (!s.toLowerCase().includes(q.toLowerCase()) && !e.toLowerCase().includes(q.toLowerCase())) return false; }
+      if (S.auModule !== "all" && c.module !== S.auModule) return false;
+      return true;
+    });
+    const pillBase = "text-xs px-3 py-1.5 rounded-full border cursor-pointer transition-colors select-none";
+    const pillA = "bg-accent/20 border-accent/40 text-accent", pillI = "bg-row border-border text-muted hover:text-primary";
+    const COLS = ["TIME", "EVENT ID", "MODULE", "ACTION", "ENTITY", "SUMMARY", "USER"];
+
+    let bodyRows;
+    if (S.auTab === "pending") {
+      bodyRows = filteredPending.map((c) => {
+        const a = pendingActionDisplay(c), e = pendingEntityDisplay(c), s = pendingSummary(c);
+        const uc = userColor("prototype_user");
+        const exp = !!S.auExpanded[c.id];
+        return `<tr data-act="au-expand" data-id="${c.id}" class="border-b border-border hover:bg-row/50 transition-colors cursor-pointer">
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full flex-shrink-0 ${a.dot}"></span><span class="text-xs font-mono text-muted">${fmtTimeHMS(c.createdAt)}</span></div></td>
+          <td class="px-4 py-3 font-mono text-xs text-muted">${c.id.slice(0, 8).toUpperCase()}</td>
+          <td class="px-4 py-3">${moduleBadge(c.module)}</td>
+          <td class="px-4 py-3 text-sm font-medium ${a.color}">${a.label}</td>
+          <td class="px-4 py-3 font-mono text-xs text-muted">${esc(e)}</td>
+          <td class="px-4 py-3 text-sm text-primary/80 max-w-xs truncate">${esc(s)}</td>
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 ${uc.bg} ${uc.border}"><span class="text-[10px] font-medium ${uc.text}">PR</span></div><span class="text-xs text-muted">prototype_user</span></div></td>
+        </tr>${exp ? `<tr class="border-b border-border"><td colspan="7" class="bg-row border-t border-border px-6 py-4"><div class="flex items-center gap-2 mb-3"><span class="text-xs text-amber-400 font-medium uppercase tracking-wide">Staged — not yet committed</span></div><div class="bg-card border border-border rounded-lg p-3 inline-block min-w-48"><div class="text-xs text-muted font-medium mb-2 uppercase tracking-wide">Payload</div><pre class="text-xs text-primary/70 whitespace-pre-wrap">${esc(JSON.stringify(c.payload, null, 2))}</pre></div><p class="text-xs text-muted mt-3">Staged: ${fmtDateTime(c.createdAt)}${c.targetId ? ` · Target: ${c.targetId}` : ""}</p></td></tr>` : ""}`;
+      }).join("");
+      if (filteredPending.length === 0) bodyRows = `<tr><td colspan="7" class="px-4 py-12 text-center text-muted text-sm">${S.pending.length === 0 ? "No pending changes." : "No events match the current filters."}</td></tr>`;
+    } else {
+      bodyRows = filteredLogs.map((l) => {
+        const a = committedActionDisplay(l.action, l.afterJson);
+        const uc = userColor(l.userId);
+        const exp = !!S.auExpanded[l.id];
+        let expBody = "";
+        if (exp) {
+          if (l.action === "configuration_committed") expBody = `<div class="flex items-center gap-2"><span class="text-green-400 font-semibold">✓ Committed</span><span class="text-sm text-muted">${esc(l.summary)}</span></div>`;
+          else expBody = `<div class="flex items-start gap-3"><div class="flex-1 bg-red-900/20 border border-red-800/30 rounded-lg p-3"><div class="text-xs text-red-400 font-medium mb-2">BEFORE</div><pre class="text-xs text-red-300/80 whitespace-pre-wrap">${esc(JSON.stringify(JSON.parse(l.beforeJson || "{}"), null, 2))}</pre></div><span class="text-muted mt-2">→</span><div class="flex-1 bg-green-900/20 border border-green-800/30 rounded-lg p-3"><div class="text-xs text-green-400 font-medium mb-2">AFTER</div><pre class="text-xs text-green-300/80 whitespace-pre-wrap">${esc(JSON.stringify(JSON.parse(l.afterJson || "{}"), null, 2))}</pre></div></div>`;
+        }
+        return `<tr data-act="au-expand" data-id="${l.id}" class="border-b border-border hover:bg-row/50 transition-colors cursor-pointer">
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full flex-shrink-0 ${a.dot}"></span><span class="text-xs font-mono text-muted">${fmtTimeHMS(l.eventDt)}</span></div></td>
+          <td class="px-4 py-3 font-mono text-xs text-muted">${l.id}</td>
+          <td class="px-4 py-3">${moduleBadge(l.module)}</td>
+          <td class="px-4 py-3 text-sm font-medium ${a.color}">${a.label}</td>
+          <td class="px-4 py-3 font-mono text-xs text-muted">${esc(l.entity)}</td>
+          <td class="px-4 py-3 text-sm text-primary/80 max-w-xs truncate">${esc(l.summary)}</td>
+          <td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 ${uc.bg} ${uc.border}"><span class="text-[10px] font-medium ${uc.text}">${initials(l.userId)}</span></div><span class="text-xs text-muted">${l.userId}</span></div></td>
+        </tr>${exp ? `<tr class="border-b border-border"><td colspan="7" class="bg-row border-t border-border px-6 py-4">${expBody}<p class="text-xs text-muted mt-2">${fmtDateTime(l.eventDt)} · Session: ${l.sessionId}</p></td></tr>` : ""}`;
+      }).join("");
+      if (filteredLogs.length === 0) bodyRows = `<tr><td colspan="7" class="px-4 py-12 text-center text-muted text-sm">No events match the current filters.</td></tr>`;
+    }
+
+    return `<div class="p-8">
+      <div class="mb-6"><h1 class="text-2xl font-semibold text-primary">Audit Log</h1><p class="text-muted text-sm mt-1">Immutable record of all configuration changes and commitments</p></div>
+      <div class="flex items-center gap-3 mb-6 flex-wrap">
+        <span class="text-xs bg-row border border-border text-muted px-3 py-1.5 rounded-full">Total Events: <span class="text-primary font-medium">${logs.length}</span></span>
+        <span class="text-xs bg-green-900/20 border border-green-800/30 text-green-400 px-3 py-1.5 rounded-full">Commits: <span class="font-medium">${commitCount}</span></span>
+        <span class="text-xs bg-teal-900/20 border border-teal-800/30 text-teal-400 px-3 py-1.5 rounded-full">Config Changes: <span class="font-medium">${configCount}</span></span>
+        <span class="flex-1"></span>
+        <button data-act="au-export" class="border border-border text-muted hover:text-primary text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>Export CSV</button>
+      </div>
+      <div class="flex items-center justify-between border-b border-border mb-5">
+        <div class="flex items-center">
+          <button data-act="auTab" data-val="pending" class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${S.auTab === "pending" ? "border-amber-400 text-primary" : "border-transparent text-muted hover:text-primary"}"><span class="w-2 h-2 rounded-full ${S.auTab === "pending" ? "bg-amber-400" : "bg-muted"}"></span>Pending Changes<span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${S.auTab === "pending" ? "bg-amber-400/20 text-amber-400" : "bg-row text-muted"}">${S.pending.length}</span></button>
+          <button data-act="auTab" data-val="committed" class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${S.auTab === "committed" ? "border-green-400 text-primary" : "border-transparent text-muted hover:text-primary"}"><span class="w-2 h-2 rounded-full ${S.auTab === "committed" ? "bg-green-400" : "bg-muted"}"></span>Committed<span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${S.auTab === "committed" ? "bg-green-900/30 text-green-400" : "bg-row text-muted"}">${commitCount}</span></button>
+        </div>
+        ${S.auTab === "pending" && S.pending.length > 0 ? `<div class="flex items-center gap-1.5 text-xs text-amber-400 pb-2"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>${S.pending.length} changes pending — not yet live</div>` : ""}
+      </div>
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <div class="relative"><svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg><input data-input="auSearch" value="${esc(q)}" type="text" placeholder="Search events, entities, IDs..." class="text-sm bg-row border border-border rounded-lg pl-9 pr-3 py-2 text-primary placeholder-muted focus:outline-none focus:border-accent w-64" /></div>
+        <select data-select="auModule" class="bg-row border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-accent">
+          ${["all::All Modules", "warehouse_setup::warehouse_setup", "product_config::product_config", "transfer_thresholds::transfer_thresholds", "transfer_approval::transfer_approval"].map((o) => { const [v, l] = o.split("::"); return `<option value="${v}" ${S.auModule === v ? "selected" : ""}>${l}</option>`; }).join("")}
+        </select>
+        ${S.auTab === "committed" ? `<div class="flex items-center gap-1">${[["all", "All"], ["commits", "Commits"], ["config", "Config"], ["csv", "CSV"]].map(([k, l]) => `<button data-act="auAction" data-val="${k}" class="${pillBase} ${S.auAction === k ? pillA : pillI}">${l}</button>`).join("")}</div>
+        <select data-select="auUser" class="bg-row border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-accent"><option value="all">All Users</option>${uniqueUsers.map((u) => `<option value="${u}" ${S.auUser === u ? "selected" : ""}>${u}</option>`).join("")}</select>` : ""}
+        <span class="ml-auto text-xs text-muted">${S.auTab === "pending" ? `${filteredPending.length} / ${S.pending.length} events` : `${filteredLogs.length} / ${logs.length} events`}</span>
+      </div>
+      <div class="bg-card border border-border rounded-xl overflow-hidden"><table class="w-full text-sm"><thead><tr class="border-b border-border bg-row">${COLS.map((c) => `<th class="text-left text-xs font-medium text-muted uppercase tracking-wide px-4 py-3">${c}</th>`).join("")}</tr></thead><tbody>${bodyRows}</tbody></table></div>
+    </div>`;
+  }
+  </script>
+  <script id="wireup">
+  /* ═══════════════════════ MODALS ═══════════════════════ */
+  const MODULE_LABELS_SHORT = { warehouse_setup: "Warehouse", transfer_thresholds: "Thresholds", product_config: "Product", approval: "Approval", draft: "Draft" };
+  function renderModals() {
+    let out = "";
+    if (S.draftModalOpen) {
+      const rows = S.pending.length === 0
+        ? `<p class="px-5 py-4 text-sm text-muted text-center">No pending changes.</p>`
+        : S.pending.map((c) => `<div class="px-5 py-3 flex items-start justify-between gap-3"><div class="min-w-0"><p class="text-sm text-primary leading-snug">${esc(pendingSummary(c))}</p><p class="text-xs text-muted mt-0.5">${fmtTime(c.createdAt)}</p></div><span class="shrink-0 text-[10px] font-medium bg-amber-900/30 text-amber-300 border border-amber-700/30 px-2 py-0.5 rounded-full whitespace-nowrap">${MODULE_LABELS_SHORT[c.module] ?? c.module}</span></div>`).join("");
+      out += `<div data-act="backdrop-draft" class="fixed inset-0 bg-black/60 z-[200] flex items-start justify-center pt-20 p-4"><div class="bg-card border border-border rounded-xl w-full max-w-md shadow-xl"><div class="flex items-center justify-between px-5 py-4 border-b border-border"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><h3 class="text-sm font-semibold text-primary">Staged Changes</h3><span class="text-xs bg-amber-700/50 text-amber-200 px-1.5 py-0.5 rounded-full">${S.pending.length}</span></div><button data-act="close-draft" class="text-muted hover:text-primary transition-colors">${ICON.xmark}</button></div><div class="max-h-80 overflow-y-auto divide-y divide-border">${rows}</div></div></div>`;
+    }
+    if (S.commitModalOpen) {
+      let inner;
+      if (S.commitResult) {
+        inner = `<div class="text-center"><div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3"><svg class="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div><h3 class="text-primary font-semibold">Committed</h3><p class="text-muted text-sm mt-1">${S.commitApplied} change${S.commitApplied !== 1 ? "s" : ""} applied to live configuration.</p><button data-act="commit-done" class="mt-4 w-full py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm">Done</button></div>`;
+      } else {
+        inner = `<h3 class="text-primary font-semibold mb-2">Commit ${S.pending.length} change${S.pending.length !== 1 ? "s" : ""}?</h3><p class="text-muted text-sm mb-5">This will apply all staged changes to the live configuration and write an audit entry.</p><div class="flex gap-2"><button data-act="close-commit" class="flex-1 py-2 rounded-lg border border-border text-muted hover:text-primary text-sm">Cancel</button><button data-act="commit-go" class="flex-1 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium">Commit</button></div>`;
+      }
+      out += `<div data-act="backdrop-commit" class="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4"><div class="bg-card border border-border rounded-xl p-6 w-full max-w-sm">${inner}</div></div>`;
+    }
+    if (S.txnToast) {
+      out += `<div class="fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium ${S.txnToast.type === "success" ? "bg-green-900/80 border-green-700/50 text-green-300" : "bg-orange-900/80 border-orange-700/50 text-orange-300"}">${esc(S.txnToast.message)}<button data-act="toast-close" class="ml-2 text-current opacity-70 hover:opacity-100 text-lg leading-none">×</button></div>`;
+    }
+    return out;
+  }
+
+  /* ═══════════════════════ COMMIT / APPLY ═══════════════════════ */
+  let _aud = 100;
+  function nextAuditId() { _aud++; return "AUD-" + String(_aud).padStart(4, "0"); }
+  const AUDIT_MODULE = { donor_participation: "warehouse_setup", master_sink: "warehouse_setup", pair_override: "warehouse_setup", global_threshold: "transfer_thresholds", category_threshold: "transfer_thresholds", category_threshold_clear: "transfer_thresholds", brand_threshold: "transfer_thresholds", brand_threshold_clear: "transfer_thresholds", global_product_config: "product_config", brand_shelf_life: "product_config", sku_config: "product_config", inventory_condition: "product_config" };
+  function commitActionName(c) {
+    switch (c.entity) {
+      case "donor_participation": return "donor_participation_updated";
+      case "master_sink": return c.op === "set" ? "master_sink_updated" : "master_sink_cleared";
+      case "pair_override": return c.op === "set" ? "route_pair_override_set" : "route_pair_override_cleared";
+      case "global_threshold": return "global_threshold_updated";
+      case "category_threshold": return "category_threshold_updated";
+      case "category_threshold_clear": return "category_threshold_cleared";
+      case "brand_threshold": return "brand_threshold_updated";
+      case "brand_threshold_clear": return "brand_threshold_cleared";
+      case "global_product_config": return "product_config_updated";
+      case "brand_shelf_life": return "brand_shelf_life_updated";
+      case "sku_config": return c.payload.isIgnored === true ? "sku_ignored" : c.payload.isIgnored === false ? "sku_unignored" : "sku_shelf_life_override_set";
+      case "inventory_condition": return "inventory_condition_updated";
+      default: return c.entity;
+    }
+  }
+  function applyPending(c) {
+    const p = c.payload;
+    switch (c.entity) {
+      case "master_sink": S.masterSinkId = c.op === "set" ? c.targetId : null; break;
+      case "donor_participation": { const d = donorSettings.find((x) => x.warehouseId === c.targetId); if (d) d.isParticipating = p.isParticipating; break; }
+      case "pair_override": { let o = overrides.find((x) => x.donorWarehouseId === c.targetId); if (c.op === "set") { if (o) { o.sinkWarehouseId = p.sinkId; o.isActive = true; } else overrides.push({ donorWarehouseId: c.targetId, sinkWarehouseId: p.sinkId, isActive: true }); } else if (o) o.isActive = false; break; }
+      case "global_threshold": thresholdsGlobal[p.field] = p.value; break;
+      case "category_threshold": { let e = categoryThresholds.find((x) => x.categoryId === c.targetId); if (!e) { e = { categoryId: c.targetId, categoryName: p.categoryName, cogsMin: null, cogsMax: null, unitsMin: null, unitsMax: null, weightMin: null, weightMax: null, isActive: true }; categoryThresholds.push(e); } e[p.field] = p.value; break; }
+      case "category_threshold_clear": { const e = categoryThresholds.find((x) => x.categoryId === c.targetId); if (e) { ["cogsMin", "cogsMax", "unitsMin", "unitsMax", "weightMin", "weightMax"].forEach((k) => e[k] = null); } break; }
+      case "brand_threshold": { let e = brandThresholds.find((x) => x.brandId === c.targetId); if (!e) { const b = brands.find((x) => x.id === c.targetId); e = { brandId: c.targetId, brandName: p.brandName || b?.name, categoryId: b?.categoryId, categoryName: "", cogsMin: null, cogsMax: null, unitsMin: null, unitsMax: null, weightMin: null, weightMax: null, isActive: true }; brandThresholds.push(e); } e[p.field] = p.value; break; }
+      case "brand_threshold_clear": { const e = brandThresholds.find((x) => x.brandId === c.targetId); if (e) ["cogsMin", "cogsMax", "unitsMin", "unitsMax", "weightMin", "weightMax"].forEach((k) => e[k] = null); break; }
+      case "global_product_config": productConfig[p.field] = p.value; break;
+      case "brand_shelf_life": { const b = brands.find((x) => x.id === (p.brandId ?? c.targetId)); if (b) { b.shelfLifeOverridePct = p.shelfLifeOverridePct ?? null; b.isActive = p.isActive ?? false; } break; }
+      case "sku_config": { const s = skus.find((x) => x.id === c.targetId); if (s) { s.shelfLifeOverridePct = p.shelfLifeOverridePct ?? null; s.isIgnored = p.isIgnored ?? false; } break; }
+      case "inventory_condition": { const cc = inventoryConditions.find((x) => x.conditionType === c.targetId); if (cc) cc.isEnabled = p.enabled; break; }
+    }
+  }
+  function doCommit() {
+    const now = new Date().toISOString();
+    const applied = S.pending.length;
+    S.pending.forEach((c) => {
+      const before = {};
+      applyPending(c);
+      S.auditLogs.unshift({ id: nextAuditId(), eventDt: now, module: AUDIT_MODULE[c.entity] ?? c.module, action: commitActionName(c), entity: c.entity, entityId: c.targetId, summary: pendingSummary(c), userId: "prototype_user", sessionId: "prototype-session", beforeJson: JSON.stringify(before), afterJson: JSON.stringify(c.payload) });
+    });
+    S.auditLogs.unshift({ id: nextAuditId(), eventDt: now, module: "draft", action: "configuration_committed", entity: "draft", entityId: null, summary: `${applied} change${applied !== 1 ? "s" : ""} committed`, userId: "prototype_user", sessionId: "prototype-session", beforeJson: JSON.stringify({ pendingCount: applied }), afterJson: JSON.stringify({ pendingCount: 0 }) });
+    S.pending = [];
+    S.commitApplied = applied;
+    S.commitResult = true;
+  }
+
+  function exportCSV() {
+    const logs = S.auditLogs;
+    const headers = ["ID", "Event DT", "Module", "Action", "Entity", "Entity ID", "Summary", "User ID"];
+    const rows = logs.map((l) => [l.id, l.eventDt, l.module, l.action, l.entity, l.entityId ?? "", `"${l.summary.replace(/"/g, '""')}"`, l.userId]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ═══════════════════════ RENDER ═══════════════════════ */
+  function render() {
+    document.documentElement.classList.toggle("light", S.theme === "light");
+    let page;
+    if (S.route === "warehouse") page = pageWarehouse();
+    else if (S.route === "product") page = pageProduct();
+    else if (S.route === "thresholds") page = pageThresholds();
+    else if (S.route === "approval") page = pageApproval();
+    else page = pageAudit();
+    document.getElementById("root").innerHTML =
+      renderSidebar() +
+      `<main class="flex-1 min-h-screen transition-[margin] duration-200 ${S.collapsed ? "ml-14" : "ml-60"}">${page}</main>` +
+      renderModals();
+    afterRender();
+  }
+  function afterRender() {
+    if (S.editKey) { const i = document.querySelector("[data-inline-input]"); if (i) { i.focus(); try { i.select(); } catch (e) {} } return; }
+    if (S._focus) {
+      let el = S._focus.sel === "__selsearch" ? document.querySelector("[data-sel-search]") : document.querySelector(`[data-input="${S._focus.sel}"]`);
+      if (el) { el.focus(); try { el.setSelectionRange(S._focus.caret, S._focus.caret); } catch (e) {} }
+    }
+  }
+
+  /* ═══════════════════════ INLINE EDIT ═══════════════════════ */
+  function commitInline(action, raw) {
+    const t = String(raw).trim();
+    const value = t === "" ? null : (isNaN(parseFloat(t)) ? null : parseFloat(t));
+    const parts = action.split(":");
+    const kind = parts[0];
+    if (kind === "gthresh") stageChange("transfer_thresholds", "global_threshold", "set", null, { field: parts[1], value });
+    else if (kind === "cthresh") { const cat = categories.find((c) => c.id === parts[1]); stageChange("transfer_thresholds", "category_threshold", "set", parts[1], { categoryId: parts[1], categoryName: cat?.name, field: parts[2], value }); }
+    else if (kind === "bthresh") { const b = brands.find((x) => x.id === parts[1]); stageChange("transfer_thresholds", "brand_threshold", "set", parts[1], { brandId: parts[1], brandName: b?.name, field: parts[2], value }); }
+    else if (kind === "prod-global") stageChange("product_config", "global_product_config", "set", null, { field: parts[1], value });
+    else if (kind === "prod-brand-sl") { const b = brands.find((x) => x.id === parts[1]); const eb = effBrand(b); stageChange("product_config", "brand_shelf_life", "set", parts[1], { brandId: parts[1], brandName: b.name, categoryId: b.categoryId, shelfLifeOverridePct: value, isActive: true }); }
+    else if (kind === "prod-sku-sl") { const s = skus.find((x) => x.id === parts[1]); const es = effSku(s); stageChange("product_config", "sku_config", "set", parts[1], { shelfLifeOverridePct: value, isIgnored: es.isIgnored }); }
+    S.editKey = null; S.editDraft = null;
+    render();
+  }
+
+  /* ═══════════════════════ TOGGLES ═══════════════════════ */
+  function handleToggle(action) {
+    const [kind, id] = action.split(":");
+    if (kind === "donor") { const part = effDonorParticipating(id); stageChange("warehouse_setup", "donor_participation", "set", id, { isParticipating: !part }); }
+    else if (kind === "route-off") stageChange("warehouse_setup", "pair_override", "clear", id, {});
+    else if (kind === "prod-global-bool") { const cfg = effProductConfig(); stageChange("product_config", "global_product_config", "set", null, { field: id, value: !cfg[id] }); }
+    else if (kind === "prod-brand-active") { const b = brands.find((x) => x.id === id); const eb = effBrand(b); stageChange("product_config", "brand_shelf_life", "set", id, { brandId: id, brandName: b.name, categoryId: b.categoryId, shelfLifeOverridePct: eb.shelfLifeOverridePct, isActive: !eb.isActive }); }
+    else if (kind === "prod-sku-elig") { const s = skus.find((x) => x.id === id); const es = effSku(s); stageChange("product_config", "sku_config", "set", id, { shelfLifeOverridePct: es.shelfLifeOverridePct, isIgnored: !es.isIgnored }); }
+    else if (kind === "prod-cond") { const cc = inventoryConditions.find((x) => x.conditionType === id); const ec = effCondition(cc); stageChange("product_config", "inventory_condition", "set", id, { enabled: !ec.isEnabled }); }
+    render();
+  }
+
+  /* ═══════════════════════ SEARCHABLE SELECT PICK ═══════════════════════ */
+  function handleSelectPick(action, val) {
+    if (action === "wh-add-donor") { S.whAddDonor = val; S.whAddSink = ""; }
+    else if (action === "wh-add-sink") S.whAddSink = val;
+    else if (action.startsWith("route-edit:")) { const donorId = action.split(":")[1]; stageChange("warehouse_setup", "pair_override", "set", donorId, { sinkId: val }); S.whEditRoute = null; }
+    else if (action === "th-cat-add-pick") S.thCatAdd = val;
+    else if (action === "th-brand-add-pick") S.thBrandAdd = val;
+    else if (action === "pr-brand-add-pick") S.prBrandAdd = val;
+    else if (action === "pr-sku-add-pick") S.prSkuAdd = val;
+    S.openSel = null; S.selQ = "";
+    render();
+  }
+
+  /* ═══════════════════════ ACTIONS ═══════════════════════ */
+  const SET_STATE = { whDonorFilter: 1, prSkuElig: 1, prSkuType: 1, txnStatus: 1, auAction: 1, apTab: 1, auTab: 1 };
+  function handleAction(act, el) {
+    // simple state setters
+    if (SET_STATE[act]) { S[act] = el.getAttribute("data-val"); if (act === "auTab" || act === "apTab") S.auExpanded = S.auExpanded; render(); return; }
+    const id = el.getAttribute("data-id");
+    switch (act) {
+      case "collapse": S.collapsed = !S.collapsed; break;
+      case "theme": S.theme = S.theme === "dark" ? "light" : "dark"; break;
+      case "open-draft": S.draftModalOpen = true; break;
+      case "close-draft": S.draftModalOpen = false; break;
+      case "open-commit": S.commitModalOpen = true; S.commitResult = false; break;
+      case "close-commit": S.commitModalOpen = false; break;
+      case "commit-go": doCommit(); break;
+      case "commit-done": S.commitModalOpen = false; S.commitResult = false; break;
+      case "discard-ask": S.discardConfirm = true; break;
+      case "discard-cancel": S.discardConfirm = false; break;
+      case "discard-now": S.pending = []; S.discardConfirm = false; break;
+      case "set-sink": stageChange("warehouse_setup", "master_sink", "set", id, { warehouseId: id }); break;
+      case "wh-toggle-add": S.whShowAdd = !S.whShowAdd; S.whAddDonor = ""; S.whAddSink = ""; break;
+      case "wh-add-commit": if (S.whAddDonor && S.whAddSink) { stageChange("warehouse_setup", "pair_override", "set", S.whAddDonor, { sinkId: S.whAddSink }); S.whShowAdd = false; S.whAddDonor = ""; S.whAddSink = ""; } break;
+      case "route-edit-start": S.whEditRoute = id; break;
+      case "route-edit-cancel": S.whEditRoute = null; break;
+      case "th-cat-add-toggle": S.thCatShowAdd = !S.thCatShowAdd; S.thCatAdd = ""; break;
+      case "th-cat-add-commit": if (S.thCatAdd && !S.thCatLocal.includes(S.thCatAdd)) { S.thCatLocal.push(S.thCatAdd); S.thCatAdd = ""; S.thCatShowAdd = false; } break;
+      case "cthresh-clear": stageChange("transfer_thresholds", "category_threshold_clear", "clear", id, {}); S.thCatLocal = S.thCatLocal.filter((x) => x !== id); break;
+      case "th-brand-add-toggle": S.thBrandShowAdd = !S.thBrandShowAdd; S.thBrandAdd = ""; break;
+      case "th-brand-add-commit": if (S.thBrandAdd && !S.thBrandLocal.includes(S.thBrandAdd)) { S.thBrandLocal.push(S.thBrandAdd); S.thBrandAdd = ""; S.thBrandShowAdd = false; } break;
+      case "bthresh-clear": stageChange("transfer_thresholds", "brand_threshold_clear", "clear", id, {}); S.thBrandLocal = S.thBrandLocal.filter((x) => x !== id); break;
+      case "pr-brand-add-toggle": S.prBrandShowAdd = !S.prBrandShowAdd; S.prBrandAdd = ""; break;
+      case "pr-brand-add-commit": if (S.prBrandAdd) { const b = brands.find((x) => x.id === S.prBrandAdd); const cfg = effProductConfig(); stageChange("product_config", "brand_shelf_life", "set", b.id, { brandId: b.id, brandName: b.name, categoryId: b.categoryId, shelfLifeOverridePct: b.shelfLifeOverridePct ?? cfg.standardShelfLifePct, isActive: true }); S.prBrandAdd = ""; S.prBrandShowAdd = false; } break;
+      case "pr-sku-add-toggle": S.prSkuShowAdd = !S.prSkuShowAdd; S.prSkuAdd = ""; break;
+      case "pr-sku-add-commit": if (S.prSkuAdd) { const s = skus.find((x) => x.id === S.prSkuAdd); const cfg = effProductConfig(); stageChange("product_config", "sku_config", "set", s.id, { shelfLifeOverridePct: cfg.standardShelfLifePct, isIgnored: s.isIgnored }); S.prSkuAdd = ""; S.prSkuShowAdd = false; } break;
+      case "ap-expand": S.apExpanded[id] = !S.apExpanded[id]; break;
+      case "ap-authorize": S.apCommitted = true; { orders.forEach((o) => { if (o.batchId === batches[0].id && o.status === "pending") o.status = "in_transit"; }); } break;
+      case "ap-reject": S.apReject = true; break;
+      case "txn-cancel": { const o = orders.find((x) => x.id === id); if (o) o.status = "cancelled"; break; }
+      case "txn-cancel-batch": { orders.forEach((o) => { if (o.batchId === S.txnBatchId && o.status === "pending") o.status = "cancelled"; }); S.txnToast = { type: "success", message: `Cancelled orders for batch ${S.txnBatchId}` }; S.txnBatchId = ""; break; }
+      case "txn-cancel-source": { orders.forEach((o) => { if (o.sourceName.toLowerCase() === (S.txnSource || "").toLowerCase() && o.status === "pending") o.status = "cancelled"; }); S.txnToast = { type: "success", message: `Cancelled orders from source warehouse ${S.txnSource}` }; S.txnSource = ""; S.txnBulkBatch = ""; break; }
+      case "toast-close": S.txnToast = null; break;
+      case "au-expand": S.auExpanded[id] = !S.auExpanded[id]; break;
+      case "au-export": exportCSV(); return;
+      default: break;
+    }
+    render();
+  }
+
+  /* ═══════════════════════ EVENT WIRING ═══════════════════════ */
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-nav],[data-tab],[data-act],[data-toggle],[data-inline],[data-sel-toggle],[data-sel-pick]");
+    // close open select if clicking outside it
+    if (S.openSel) {
+      const root = e.target.closest(`[data-sel-root="${S.openSel}"]`);
+      if (!root) { S.openSel = null; S.selQ = ""; render(); }
+    }
+    if (!t) return;
+    if (t.hasAttribute("data-nav")) { S.route = t.getAttribute("data-nav"); S.editKey = null; render(); return; }
+    if (t.hasAttribute("data-tab")) { S[t.getAttribute("data-tab")] = t.getAttribute("data-tab-key"); S.editKey = null; render(); return; }
+    if (t.hasAttribute("data-sel-toggle")) { const sid = t.getAttribute("data-sel-toggle"); S.openSel = S.openSel === sid ? null : sid; S.selQ = ""; render(); return; }
+    if (t.hasAttribute("data-sel-pick")) { handleSelectPick(t.getAttribute("data-sel-pick"), t.getAttribute("data-sel-val")); return; }
+    if (t.hasAttribute("data-toggle")) { handleToggle(t.getAttribute("data-toggle")); return; }
+    if (t.hasAttribute("data-inline")) { S.editKey = t.getAttribute("data-inline"); S.editDraft = t.getAttribute("data-inline-val") || ""; render(); return; }
+    if (t.hasAttribute("data-act")) {
+      const act = t.getAttribute("data-act");
+      // backdrop only closes when the backdrop itself (not a child) is clicked
+      if (act === "backdrop-draft") { if (e.target === t) { S.draftModalOpen = false; render(); } return; }
+      if (act === "backdrop-commit") { if (e.target === t) { S.commitModalOpen = false; S.commitResult = false; render(); } return; }
+      handleAction(act, t);
+      return;
+    }
+  });
+
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.hasAttribute("data-input")) { const key = el.getAttribute("data-input"); S[key] = el.value; S._focus = { sel: key, caret: el.selectionStart }; render(); return; }
+    if (el.hasAttribute("data-inline-input")) { S.editDraft = el.value; return; }
+    if (el.hasAttribute("data-sel-search")) { S.selQ = el.value; S._focus = { sel: "__selsearch", caret: el.selectionStart }; render(); return; }
+    if (el.hasAttribute("data-csv")) { /* noop */ }
+  });
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el.hasAttribute("data-select")) { S[el.getAttribute("data-select")] = el.value; render(); }
+    if (el.hasAttribute("data-csv-input")) { /* noop */ }
+    // csv toggle handled via click below
+  });
+  // csv panel toggle (button carries data-csv)
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-csv]");
+    if (b) { const idc = b.getAttribute("data-csv"); S.csvOpen = S.csvOpen === idc ? null : idc; render(); }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const el = e.target;
+    if (el.hasAttribute && el.hasAttribute("data-inline-input")) {
+      if (e.key === "Enter") { commitInline(el.getAttribute("data-inline-input"), el.value); }
+      else if (e.key === "Escape") { S.editKey = null; S.editDraft = null; render(); }
+    }
+  });
+  document.addEventListener("blur", (e) => {
+    const el = e.target;
+    if (el.hasAttribute && el.hasAttribute("data-inline-input")) {
+      // commit on blur unless focus moving away due to re-render
+      commitInline(el.getAttribute("data-inline-input"), el.value);
+    }
+  }, true);
+
+  // optional deep-linking for demos / documentation captures
+  (function initFromUrl() {
+    try {
+      const hash = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+      if (hash) {
+        const slash = hash.indexOf("/");
+        const route = slash === -1 ? hash : hash.slice(0, slash);
+        const tab = slash === -1 ? "" : hash.slice(slash + 1);
+        if (route) S.route = route;
+        if (tab) {
+          if (route === "warehouse") S.whTab = tab;
+          else if (route === "product") S.prTab = tab;
+          else if (route === "thresholds") S.thTab = tab;
+          else if (route === "approval") S.apTab = tab;
+          else if (route === "audit") S.auTab = tab;
+        }
+      }
+      const p = new URLSearchParams(location.search);
+      if (p.get("stage")) {
+        stageChange("warehouse_setup", "donor_participation", "set", "WH-MUM-01", { isParticipating: false });
+        stageChange("transfer_thresholds", "global_threshold", "set", null, { field: "cogsMin", value: 75000 });
+        stageChange("product_config", "sku_config", "set", "SKU-002", { shelfLifeOverridePct: 60, isIgnored: false });
+      }
+      if (p.get("modal") === "commit") S.commitModalOpen = true;
+      if (p.get("modal") === "draft") S.draftModalOpen = true;
+    } catch (e) {}
+  })();
+
+  // initial paint
+  S._focus = null;
+  render();
+</script>
+</body>
+</html>
